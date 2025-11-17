@@ -5,6 +5,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { sendChatMessage } from '@/lib/api';
+import { fetchProducts, formatProductsForAI, Product } from '@/lib/products';
+import { getConfig } from '@/lib/config';
 import ConfigModal from './ConfigModal';
 
 interface Message {
@@ -19,6 +21,8 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -27,6 +31,49 @@ export default function ChatInterface() {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Fetch products function
+  const loadProducts = async () => {
+    const config = getConfig();
+    if (!config.productsApiUrl) {
+      console.log('No products API URL configured');
+      setProducts([]);
+      return;
+    }
+
+    console.log('Fetching products from:', config.productsApiUrl);
+    setProductsLoading(true);
+    try {
+      const fetchedProducts = await fetchProducts(config.productsApiUrl);
+      console.log('Fetched products:', fetchedProducts.length, 'products');
+      setProducts(fetchedProducts);
+    } catch (err) {
+      console.error('Error loading products:', err);
+      setProducts([]);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  // Load products on mount and set up polling every 15 minutes
+  useEffect(() => {
+    // Initial load
+    loadProducts();
+
+    // Set up polling every 15 minutes (900000 ms)
+    const interval = setInterval(() => {
+      loadProducts();
+    }, 15 * 60 * 1000);
+
+    // Cleanup
+    return () => clearInterval(interval);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  
+  // Reload products when config modal closes
+  const handleConfigClose = () => {
+    setIsConfigOpen(false);
+    loadProducts(); // Reload products after config change
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +89,7 @@ export default function ChatInterface() {
     setIsLoading(true);
 
     try {
-      const response = await sendChatMessage(newMessages);
+      const response = await sendChatMessage(newMessages, products);
       
       // Add assistant response
       setMessages([
@@ -74,6 +121,35 @@ export default function ChatInterface() {
         <div className="bg-gradient-to-r from-purple-600 to-indigo-700 text-white p-8 text-center">
           <h1 className="text-4xl font-bold mb-2">🤖 AI Workshop Assistant</h1>
           <p className="text-lg opacity-90">Ask me anything about the workshop!</p>
+          
+          {/* Products Status Indicator */}
+          <div className="mt-3">
+            {productsLoading ? (
+              <span className="text-sm bg-white bg-opacity-20 px-3 py-1 rounded-full">
+                🔄 Loading products...
+              </span>
+            ) : products.length > 0 ? (
+              <span className="text-sm bg-green-500 bg-opacity-80 px-3 py-1 rounded-full">
+                ✅ {products.length} product{products.length !== 1 ? 's' : ''} loaded
+              </span>
+            ) : getConfig().productsApiUrl ? (
+              <div className="flex flex-col gap-1">
+                <span className="text-sm bg-yellow-500 bg-opacity-80 px-3 py-1 rounded-full">
+                  ⚠️ No products available
+                </span>
+                <button 
+                  onClick={() => loadProducts()}
+                  className="text-xs underline opacity-75 hover:opacity-100"
+                >
+                  Retry Loading
+                </button>
+              </div>
+            ) : (
+              <span className="text-xs opacity-75">
+                Configure Products API in settings
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Chat Container */}
@@ -170,7 +246,7 @@ export default function ChatInterface() {
       </div>
 
       {/* Config Modal */}
-      {isConfigOpen && <ConfigModal onClose={() => setIsConfigOpen(false)} />}
+      {isConfigOpen && <ConfigModal onClose={handleConfigClose} />}
     </div>
   );
 }

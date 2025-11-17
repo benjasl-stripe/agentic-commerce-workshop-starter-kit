@@ -10,15 +10,17 @@ interface ConfigModalProps {
 export default function ConfigModal({ onClose }: ConfigModalProps) {
   const [lambdaEndpoint, setLambdaEndpoint] = useState('');
   const [workshopSecret, setWorkshopSecret] = useState('');
+  const [productsApiUrl, setProductsApiUrl] = useState('');
 
   useEffect(() => {
     const config = getConfig();
     setLambdaEndpoint(config.lambdaEndpoint || '');
     setWorkshopSecret(config.workshopSecret || '');
+    setProductsApiUrl(config.productsApiUrl || '');
   }, []);
 
   const handleSave = () => {
-    saveConfig({ lambdaEndpoint, workshopSecret });
+    saveConfig({ lambdaEndpoint, workshopSecret, productsApiUrl });
     alert('Configuration saved! ✅');
     onClose();
   };
@@ -61,6 +63,22 @@ export default function ConfigModal({ onClose }: ConfigModalProps) {
               placeholder="Your workshop secret"
               className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-600"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Products API URL
+            </label>
+            <input
+              type="text"
+              value={productsApiUrl}
+              onChange={(e) => setProductsApiUrl(e.target.value)}
+              placeholder="https://your-api.com/products"
+              className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-600"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              URL that returns a JSON list of products (updated every 15 minutes)
+            </p>
           </div>
         </div>
 

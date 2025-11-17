@@ -1,6 +1,7 @@
 export interface Config {
   lambdaEndpoint: string;
   workshopSecret: string;
+  productsApiUrl: string;
 }
 
 export function getConfig(): Config {
@@ -8,12 +9,14 @@ export function getConfig(): Config {
     return {
       lambdaEndpoint: '',
       workshopSecret: '',
+      productsApiUrl: '',
     };
   }
 
   return {
     lambdaEndpoint: localStorage.getItem('lambdaEndpoint') || '',
     workshopSecret: localStorage.getItem('workshopSecret') || '',
+    productsApiUrl: localStorage.getItem('productsApiUrl') || '',
   };
 }
 
@@ -22,5 +25,6 @@ export function saveConfig(config: Config): void {
 
   localStorage.setItem('lambdaEndpoint', config.lambdaEndpoint);
   localStorage.setItem('workshopSecret', config.workshopSecret);
+  localStorage.setItem('productsApiUrl', config.productsApiUrl);
 }
 

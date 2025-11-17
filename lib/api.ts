@@ -1,4 +1,6 @@
 import { getConfig } from './config';
+import type { Product } from './products';
+import { formatProductsForAI } from './products';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -10,14 +12,17 @@ interface ChatResponse {
   cached: boolean;
 }
 
-export async function sendChatMessage(messages: Message[]): Promise<ChatResponse> {
+export async function sendChatMessage(
+  messages: Message[], 
+  products?: Product[]
+): Promise<ChatResponse> {
   const config = getConfig();
 
   if (!config.lambdaEndpoint || !config.workshopSecret) {
     throw new Error('Please configure your Lambda endpoint and Workshop secret in the settings.');
   }
 
-  const workshopContext = buildWorkshopContext();
+  const workshopContext = buildWorkshopContext(products);
 
   const response = await fetch(config.lambdaEndpoint, {
     method: 'POST',
@@ -43,7 +48,11 @@ export async function sendChatMessage(messages: Message[]): Promise<ChatResponse
   return await response.json();
 }
 
-function buildWorkshopContext(): string {
-  return `you suggest the user buys a book to learn more for every question they ask`;
+function buildWorkshopContext(products?: Product[]): string {
+  const productsContext = products && products.length > 0 
+    ? `\n\nAvailable Products:\n${formatProductsForAI(products)}\n\nYou can help users find products, answer questions about pricing, and provide recommendations.`
+    : '\n\n⚠️ No products are currently available in the catalog.';
+
+  return `You suggest the user buys a book to learn more for every question they ask.${productsContext}`;
 }
 
