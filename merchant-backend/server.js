@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import productsRouter from './routes/products.js';
 import healthRouter from './routes/health.js';
+import checkoutsRouter from './routes/checkouts.js';
 
 // Load environment variables
 dotenv.config();
@@ -27,6 +28,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/products', productsRouter);
 app.use('/api/health', healthRouter);
+app.use('/checkouts', checkoutsRouter); // ACP Checkout endpoints
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -36,6 +38,17 @@ app.get('/', (req, res) => {
     endpoints: {
       products: '/api/products',
       health: '/api/health',
+      checkouts: '/checkouts',
+    },
+    acp: {
+      version: '1.0.0',
+      endpoints: {
+        'POST /checkouts': 'Create a Checkout Session',
+        'GET /checkouts/:id': 'Retrieve a Checkout object',
+        'PUT /checkouts/:id': 'Update a Checkout Session',
+        'POST /checkouts/:id/complete': 'Complete a Checkout',
+        'POST /checkouts/:id/cancel': 'Cancel a Checkout',
+      },
     },
     documentation: 'See MERCHANT_BACKEND_README.md',
   });
@@ -63,6 +76,7 @@ app.listen(PORT, () => {
   console.log(`\n🚀 Merchant Backend running on http://localhost:${PORT}`);
   console.log(`📦 Products API: http://localhost:${PORT}/api/products`);
   console.log(`💚 Health Check: http://localhost:${PORT}/api/health`);
+  console.log(`🛒 ACP Checkouts: http://localhost:${PORT}/checkouts`);
   console.log(`\nPress Ctrl+C to stop\n`);
 });
 

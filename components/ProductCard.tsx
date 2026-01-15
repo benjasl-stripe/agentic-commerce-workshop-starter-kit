@@ -10,85 +10,40 @@ export default function ProductCard({ product }: ProductCardProps) {
     : product.price;
 
   return (
-    <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-shadow overflow-hidden flex-shrink-0 w-64">
-      {/* Product Image */}
-      <div className="relative h-48 bg-gradient-to-br from-purple-100 to-indigo-100 overflow-hidden">
-        {product.thumbnail ? (
-          <img
-            src={product.thumbnail}
-            alt={product.title}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              // Fallback if image fails to load
-              e.currentTarget.style.display = 'none';
-              e.currentTarget.parentElement!.classList.add('flex', 'items-center', 'justify-center');
-              e.currentTarget.parentElement!.innerHTML = `
-                <div class="text-6xl">📦</div>
-              `;
-            }}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-6xl">
-            📦
-          </div>
-        )}
-        
-        {/* Stock Badge */}
-        {product.inStock !== undefined && (
-          <div className="absolute top-2 right-2">
-            {product.inStock ? (
-              <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                In Stock
-              </span>
-            ) : (
-              <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                Out of Stock
-              </span>
-            )}
-          </div>
-        )}
+    <div className="bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:shadow-sm transition-all p-3 flex items-center gap-3 min-w-[280px] max-w-[320px]">
+      {/* Compact Icon */}
+      <div className="w-10 h-10 bg-gradient-to-br from-purple-50 to-indigo-100 rounded-lg flex items-center justify-center text-lg flex-shrink-0">
+        📦
       </div>
-
+      
       {/* Product Info */}
-      <div className="p-4">
-        <h3 className="font-bold text-gray-800 text-lg mb-2 line-clamp-2 h-14">
-          {product.title}
-        </h3>
-        
-        {product.description && (
-          <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-            {product.description}
-          </p>
-        )}
-
-        <div className="flex items-center justify-between">
-          <span className="text-2xl font-bold text-purple-600">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-semibold text-gray-900 text-sm leading-tight truncate" title={product.title}>
+            {product.title}
+          </h3>
+          <span className="text-sm font-bold text-purple-600 flex-shrink-0">
             {price}
           </span>
+        </div>
+        
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-[10px] text-gray-400 font-mono">{product.id}</span>
           
-          {product.category && (
-            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
-              {product.category}
+          {product.inStock !== undefined && (
+            product.inStock ? (
+              <span className="text-[10px] text-green-600 font-medium">● In Stock</span>
+            ) : (
+              <span className="text-[10px] text-red-500 font-medium">● Out of Stock</span>
+            )
+          )}
+          
+          {product.rating && (
+            <span className="text-[10px] text-gray-500">
+              ⭐ {product.rating}
             </span>
           )}
         </div>
-
-        {/* Rating (if available) */}
-        {product.rating && (
-          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-            <div className="flex items-center gap-1">
-              <span className="text-yellow-500">⭐</span>
-              <span className="text-sm font-semibold text-gray-700">
-                {product.rating}
-              </span>
-            </div>
-            {product.reviews && (
-              <span className="text-xs text-gray-500">
-                ({product.reviews} reviews)
-              </span>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

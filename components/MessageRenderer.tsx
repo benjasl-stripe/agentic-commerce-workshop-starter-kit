@@ -21,19 +21,10 @@ export default function MessageRenderer({ content, products }: MessageRendererPr
   const flushProductGroup = () => {
     if (currentProductGroup.length > 0) {
       groupedElements.push(
-        <div key={`products-${groupedElements.length}`} className="my-4">
-          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-purple-300 scrollbar-track-gray-100">
-            {currentProductGroup.map((product, idx) => (
-              <div key={idx} className="flex-shrink-0">
-                <ProductCard product={product} />
-              </div>
-            ))}
-          </div>
-          {currentProductGroup.length > 2 && (
-            <div className="text-center mt-2">
-              <span className="text-xs text-gray-400">← Scroll to see more →</span>
-            </div>
-          )}
+        <div key={`products-${groupedElements.length}`} className="my-3 space-y-2">
+          {currentProductGroup.map((product, idx) => (
+            <ProductCard key={idx} product={product} />
+          ))}
         </div>
       );
       currentProductGroup = [];

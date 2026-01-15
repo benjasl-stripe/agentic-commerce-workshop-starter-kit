@@ -1,0 +1,138 @@
+{
+  "info": {
+    "_postman_id": "acp-checkouts-collection",
+    "name": "ACP Checkout Endpoints",
+    "description": "Agentic Commerce Protocol (ACP) checkout endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000",
+      "type": "string"
+    },
+    {
+      "key": "checkoutId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Create Checkout Session",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "if (jsonData.id) {",
+              "    pm.collectionVariables.set('checkoutId', jsonData.id);",
+              "    console.log('Saved checkout ID:', jsonData.id);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [\n    {\n      \"id\": \"PCA-001\",\n      \"quantity\": 2\n    }\n  ],\n  \"buyer\": {\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"phone_number\": \"+1234567890\"\n  },\n  \"fulfillment_address\": {\n    \"name\": \"John Doe\",\n    \"line_one\": \"123 Main St\",\n    \"line_two\": \"Apt 4B\",\n    \"city\": \"San Francisco\",\n    \"state\": \"CA\",\n    \"country\": \"US\",\n    \"postal_code\": \"94105\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/checkouts",
+          "host": ["{{baseUrl}}"],
+          "path": ["checkouts"]
+        },
+        "description": "POST /checkouts - Create a new checkout session"
+      }
+    },
+    {
+      "name": "2. Retrieve Checkout",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/checkouts/{{checkoutId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["checkouts", "{{checkoutId}}"]
+        },
+        "description": "GET /checkouts/:id - Retrieve an existing checkout session"
+      }
+    },
+    {
+      "name": "3. Update Checkout Session",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [\n    {\n      \"id\": \"PCA-001\",\n      \"quantity\": 3\n    },\n    {\n      \"id\": \"AEP-002\",\n      \"quantity\": 1\n    }\n  ],\n  \"fulfillment_address\": {\n    \"name\": \"John Doe\",\n    \"line_one\": \"456 Oak Ave\",\n    \"city\": \"Los Angeles\",\n    \"state\": \"CA\",\n    \"country\": \"US\",\n    \"postal_code\": \"90210\"\n  },\n  \"fulfillment_option_id\": \"shipping_express\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/checkouts/{{checkoutId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["checkouts", "{{checkoutId}}"]
+        },
+        "description": "PUT /checkouts/:id - Update an existing checkout session"
+      }
+    },
+    {
+      "name": "4. Complete Checkout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"payment_data\": {\n    \"token\": \"spt_123\",\n    \"provider\": \"stripe\",\n    \"billing_address\": {\n      \"name\": \"John Doe\",\n      \"line_one\": \"123 Main St\",\n      \"line_two\": \"Apt 4B\",\n      \"city\": \"San Francisco\",\n      \"state\": \"CA\",\n      \"country\": \"US\",\n      \"postal_code\": \"94105\"\n    }\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/checkouts/{{checkoutId}}/complete",
+          "host": ["{{baseUrl}}"],
+          "path": ["checkouts", "{{checkoutId}}", "complete"]
+        },
+        "description": "POST /checkouts/:id/complete - Complete the checkout and process payment"
+      }
+    },
+    {
+      "name": "5. Cancel Checkout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/checkouts/{{checkoutId}}/cancel",
+          "host": ["{{baseUrl}}"],
+          "path": ["checkouts", "{{checkoutId}}", "cancel"]
+        },
+        "description": "POST /checkouts/:id/cancel - Cancel an existing checkout session"
+      }
+    }
+  ]
+}

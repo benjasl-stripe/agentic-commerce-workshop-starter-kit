@@ -1,70 +1,43 @@
 import express from 'express';
+import { products, originalPrices, updateInStock, getSalesHistory, getSalesSummary, clearSalesHistory } from '../lib/productStore.js';
 
 const router = express.Router();
 
-// In-memory product store (replace with database later)
-let products = [
-  {
-    "id": "PCA-001",
-    "title": "Poor Charlie's Almanack: The Essential Wit and Wisdom of Charles T. Munger",
-    "price": 30,
-    "currency": "USD",
-    "thumbnail": "/public/images/products/pc1.jpg",
-    "description": "Originally published in 2005, this compilation of 11 talks by legendary investor Charles T. Munger draws on his encyclopedic knowledge of business, finance, history, philosophy, physics, and ethics. :contentReference[oaicite:1]{index=1}",
-    "category": "Books",
-    "inStock": true,
-    "rating": 4.40,
-    "reviews": 16936
-  },
-  {
-    "id": "AEP-002",
-    "title": "An Elegant Puzzle: Systems of Engineering Management",
-    "price": 35,
-    "currency": "USD",
-    "thumbnail": "https://press.stripe.com/an-elegant-puzzle/cover.jpg",
-    "description": "A masterful study of the challenges and demands of the discipline of engineering management—team sizing, technical debt, succession planning—by Will Larson. :contentReference[oaicite:2]{index=2}",
-    "category": "Books",
-    "inStock": true,
-    "rating": 4.08,
-    "reviews": 3768
-  },
-  {
-    "id": "TOME-003",
-    "title": "The Origins of Efficiency",
-    "price": 40,
-    "currency": "USD",
-    "thumbnail": "https://press.stripe.com/the-origins-of-efficiency/cover.jpg",
-    "description": "Brian Potter argues that improving production efficiency is the force behind some of the most consequential changes in human history, and explores how we can push efficiency into new domains. :contentReference[oaicite:3]{index=3}",
-    "category": "Books",
-    "inStock": true,
-    "rating": 4.22,
-    "reviews": 50
-  },
-  {
-    "id": "WIFC-004",
-    "title": "Where Is My Flying Car?: A Memoir of Future Past",
-    "price": 24,
-    "currency": "USD",
-    "thumbnail": "https://press.stripe.com/where-is-my-flying-car/cover.jpg",
-    "description": "J. Storrs Hall asks why we don’t have flying cars yet, and uses that question as a launch point to examine stalled technological progress and what it might take to reverse it. :contentReference[oaicite:4]{index=4}",
-    "category": "Books",
-    "inStock": true,
-    "rating": 4.07,
-    "reviews": 787
-  },
-  {
-    "id": "REV-005",
-    "title": "The Revolt of the Public and the Crisis of Authority in the New Millennium",
-    "price": 24,
-    "currency": "USD",
-    "thumbnail": "https://press.stripe.com/the-revolt-of-the-public/cover.jpg",
-    "description": "Martin Gurri explores how authority and public trust are changing in the digital age, arguing we are entering a new era of social upheaval. :contentReference[oaicite:5]{index=5}",
-    "category": "Books",
-    "inStock": true,
-    "rating": 4.20,
-    "reviews": 1865
-  }
-]
+// ============================================================================
+// SALES TRACKING ENDPOINTS
+// ============================================================================
+
+// GET sales history
+router.get('/sales', (req, res) => {
+  const history = getSalesHistory();
+  const summary = getSalesSummary();
+  
+  const totalRevenue = history.reduce((sum, sale) => sum + sale.totalAmount, 0);
+  const totalItemsSold = history.reduce((sum, sale) => sum + sale.quantity, 0);
+  
+  res.json({
+    totalRevenue,
+    totalItemsSold,
+    totalOrders: history.length,
+    history,
+    summary,
+  });
+});
+
+// GET sales summary only
+router.get('/sales/summary', (req, res) => {
+  const summary = getSalesSummary();
+  res.json(summary);
+});
+
+// POST clear sales history (reset for demo)
+router.post('/sales/reset', (req, res) => {
+  clearSalesHistory();
+  res.json({
+    success: true,
+    message: 'Sales history cleared',
+  });
+});
 
 
 // GET all products
@@ -242,6 +215,169 @@ router.get('/meta/stats', (req, res) => {
   res.json({
     success: true,
     stats,
+  });
+});
+
+// ============================================================================
+// SIMULATION ENDPOINTS - For demo/testing real-world scenarios
+// ============================================================================
+
+/**
+ * POST /api/products/simulate/price-change
+ * Simulate a price change for a product
+ * Body: { productId: string, newPrice: number } or { productId: string, change: number (percentage) }
+ */
+router.post('/simulate/price-change', (req, res) => {
+  const { productId, newPrice, change } = req.body;
+  
+  const product = products.find(p => p.id === productId);
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  
+  const oldPrice = product.price;
+  
+  if (newPrice !== undefined) {
+    product.price = newPrice;
+  } else if (change !== undefined) {
+    // Change is a percentage (e.g., 10 for +10%, -20 for -20%)
+    product.price = Math.round(oldPrice * (1 + change / 100));
+  } else {
+    return res.status(400).json({ error: 'Provide newPrice or change (percentage)' });
+  }
+  
+  console.log(`💰 PRICE CHANGE: ${product.title.substring(0, 30)}... $${oldPrice} → $${product.price}`);
+  
+  res.json({
+    success: true,
+    message: `Price updated from $${oldPrice} to $${product.price}`,
+    product: {
+      id: product.id,
+      title: product.title,
+      oldPrice,
+      newPrice: product.price,
+    },
+  });
+});
+
+/**
+ * POST /api/products/simulate/stock-change
+ * Simulate a stock level change for a product
+ * Body: { productId: string, stock: number } or { productId: string, change: number }
+ */
+router.post('/simulate/stock-change', (req, res) => {
+  const { productId, stock, change } = req.body;
+  
+  const product = products.find(p => p.id === productId);
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  
+  const oldStock = product.stock;
+  
+  if (stock !== undefined) {
+    product.stock = Math.max(0, stock);
+  } else if (change !== undefined) {
+    product.stock = Math.max(0, oldStock + change);
+  } else {
+    return res.status(400).json({ error: 'Provide stock or change' });
+  }
+  
+  updateInStock(product);
+  
+  const status = product.stock === 0 ? '🔴 OUT OF STOCK' : `🟢 ${product.stock} in stock`;
+  console.log(`📦 STOCK CHANGE: ${product.title.substring(0, 30)}... ${oldStock} → ${product.stock} (${status})`);
+  
+  res.json({
+    success: true,
+    message: `Stock updated from ${oldStock} to ${product.stock}`,
+    product: {
+      id: product.id,
+      title: product.title,
+      oldStock,
+      newStock: product.stock,
+      inStock: product.inStock,
+    },
+  });
+});
+
+/**
+ * POST /api/products/simulate/sell-out
+ * Instantly sell out a product (set stock to 0)
+ * Body: { productId: string }
+ */
+router.post('/simulate/sell-out', (req, res) => {
+  const { productId } = req.body;
+  
+  const product = products.find(p => p.id === productId);
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  
+  const oldStock = product.stock;
+  product.stock = 0;
+  updateInStock(product);
+  
+  console.log(`🔴 SOLD OUT: ${product.title}`);
+  
+  res.json({
+    success: true,
+    message: `${product.title} is now sold out`,
+    product: {
+      id: product.id,
+      title: product.title,
+      oldStock,
+      newStock: 0,
+      inStock: false,
+    },
+  });
+});
+
+/**
+ * POST /api/products/simulate/reset
+ * Reset all products to original prices and stock levels
+ */
+router.post('/simulate/reset', (req, res) => {
+  products.forEach(product => {
+    if (originalPrices[product.id]) {
+      product.price = originalPrices[product.id];
+    }
+    // Reset stock to reasonable levels
+    product.stock = Math.floor(Math.random() * 10) + 3; // 3-12 items
+    updateInStock(product);
+  });
+  
+  console.log('🔄 RESET: All products reset to original prices and stock levels');
+  
+  res.json({
+    success: true,
+    message: 'All products reset to original state',
+    products: products.map(p => ({
+      id: p.id,
+      title: p.title,
+      price: p.price,
+      stock: p.stock,
+      inStock: p.inStock,
+    })),
+  });
+});
+
+/**
+ * GET /api/products/simulate/status
+ * Get current simulation status (prices and stock levels)
+ */
+router.get('/simulate/status', (req, res) => {
+  res.json({
+    success: true,
+    products: products.map(p => ({
+      id: p.id,
+      title: p.title,
+      price: p.price,
+      originalPrice: originalPrices[p.id] || p.price,
+      priceChanged: p.price !== (originalPrices[p.id] || p.price),
+      stock: p.stock,
+      inStock: p.inStock,
+    })),
   });
 });
 
