@@ -25,10 +25,21 @@ export function isOpenAIConfigured() {
 // System Prompt Builder
 // ============================================================================
 
+// Hardcoded prefix - cannot be changed by frontend users
+const SYSTEM_PROMPT_PREFIX = `CRITICAL RULES:
+1. ONLY recommend products from the "Available Products" section below. If a product is not in that list, you DO NOT have it.
+2. NEVER invent, make up, or guess products. If the list is empty, say "I couldn't find any products available right now."
+3. Be honest - if you have no products to show, say so plainly.
+
+`;
+
 export function buildSystemPrompt(options = {}) {
   const { aiPersona, checkoutState, products } = options;
   
-  let systemPrompt = aiPersona || `You are a helpful AI shopping assistant for an equipment store.
+  // Always start with the hardcoded prefix
+  let systemPrompt = SYSTEM_PROMPT_PREFIX;
+  
+  systemPrompt += aiPersona || `You are a helpful AI shopping assistant for an equipment store.
 
 You help customers browse products and make purchases. When a customer wants to buy something, use the create_checkout function. Guide them through the checkout process step by step.
 
@@ -62,12 +73,15 @@ ${checkoutState.status === 'completed' ? '- 🎉 Order complete!' : ''}
 `;
   }
 
-  // Add product catalog if available
+  // Add product catalog section - always include to make it clear what's available
   if (products && products.length > 0) {
-    systemPrompt += `\n\n## Available Products\n`;
+    systemPrompt += `\n\n## Available Products (${products.length} items)\n`;
     products.forEach(p => {
-      systemPrompt += `- **${p.id}**: ${p.title} - $${p.price}\n`;
+      const productId = p.id || p._id;
+      systemPrompt += `- **${productId}**: ${p.title} - $${p.price}\n`;
     });
+  } else {
+    systemPrompt += `\n\n## Available Products\nNone - no products found.\n`;
   }
 
   return systemPrompt;

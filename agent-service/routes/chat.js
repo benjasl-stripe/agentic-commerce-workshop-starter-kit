@@ -309,7 +309,7 @@ router.post('/', async (req, res) => {
     const sanitizedMessages = sanitizeMessages(messages);
     
     // Get merchant URL from request or use default
-    const effectiveMerchantUrl = merchantUrl || process.env.MERCHANT_API_URL || 'http://localhost:4000';
+    const effectiveMerchantUrl = merchantUrl || process.env.MERCHANT_API_URL || null;
     
     // Get Lambda endpoint from request or use default
     const effectiveLambdaEndpoint = lambdaEndpoint || process.env.LAMBDA_ENDPOINT;
@@ -333,14 +333,22 @@ router.post('/', async (req, res) => {
     
     // Fetch products for context
     let products = [];
-    try {
-      const productsResponse = await fetch(`${effectiveMerchantUrl}/api/products`);
-      if (productsResponse.ok) {
-        const data = await productsResponse.json();
-        products = data.products || [];
+    if (effectiveMerchantUrl) {
+      try {
+        const productsResponse = await fetch(`${effectiveMerchantUrl}/api/products`);
+        if (productsResponse.ok) {
+          const data = await productsResponse.json();
+          // Support both { products: [] } and { data: [] } formats
+          products = Array.isArray(data) ? data : (data.products || data.data || []);
+          console.log(`   📦 Fetched ${products.length} products from ${effectiveMerchantUrl}`);
+        } else {
+          console.log(`   ⚠️ Products API returned ${productsResponse.status}`);
+        }
+      } catch (err) {
+        console.log('   ❌ Could not fetch products:', err.message);
       }
-    } catch (err) {
-      console.log('Could not fetch products:', err.message);
+    } else {
+      console.log('   ⚠️ No merchant URL configured - no products available');
     }
     
     // Context for function execution (includes merchantUrl for workshop mode)

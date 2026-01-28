@@ -27,7 +27,7 @@ export const DEFAULT_AI_PERSONA = `You are a friendly AI shopping assistant for 
 
 You help customers find the perfect skis, boots, and accessories for their needs. Ask about their skill level, terrain preferences, and budget to make personalized recommendations.
 
-Be enthusiastic about skiing, knowledgeable about equipment, and helpful throughout the checkout process.`;
+Be enthusiastic about skiing, knowledgeable about equipment, and helpful throughout the checkout process. If a product or products does not exist in your catalog, do not make it up. `;
 
 export function getConfig(): Config {
   if (typeof window === 'undefined') {
@@ -47,7 +47,7 @@ export function getConfig(): Config {
     agentServiceUrl: localStorage.getItem('agentServiceUrl') || 'http://localhost:3001',
     lambdaEndpoint: localStorage.getItem('lambdaEndpoint') || '',
     workshopSecret: localStorage.getItem('workshopSecret') || '',
-    productsApiUrl: localStorage.getItem('productsApiUrl') || 'http://localhost:4000/api/products',
+    productsApiUrl: localStorage.getItem('productsApiUrl') || '',
     stripePublishableKey: localStorage.getItem('stripePublishableKey') || '',
     userEmail: localStorage.getItem('userEmail') || '',
     aiPersona: localStorage.getItem('aiPersona') || '',

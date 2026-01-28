@@ -12,7 +12,7 @@ const router = express.Router();
 
 // Read default merchant URL dynamically (after dotenv has loaded)
 function getDefaultMerchantUrl() {
-  return process.env.MERCHANT_API_URL || 'http://localhost:4000';
+  return process.env.MERCHANT_API_URL || null;
 }
 
 /**

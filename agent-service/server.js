@@ -65,7 +65,7 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     lambdaEndpoint: process.env.LAMBDA_ENDPOINT || null,
     stripeProxyUrl: process.env.STRIPE_PROXY_URL || 'http://localhost:3002',
-    merchantUrl: process.env.MERCHANT_API_URL || 'http://localhost:4000',
+    merchantUrl: process.env.MERCHANT_API_URL || null,
   });
 });
 
@@ -96,7 +96,7 @@ app.listen(PORT, () => {
   console.log(`\n📋 Environment Configuration:`);
   console.log(`   LAMBDA_ENDPOINT: ${process.env.LAMBDA_ENDPOINT || '❌ Not set'}`);
   console.log(`   STRIPE_PROXY_URL: ${process.env.STRIPE_PROXY_URL || '❌ Not set (defaulting to http://localhost:3002)'}`);
-  console.log(`   MERCHANT_API_URL: ${process.env.MERCHANT_API_URL || '❌ Not set (defaulting to http://localhost:4000)'}`);
+  console.log(`   MERCHANT_API_URL: ${process.env.MERCHANT_API_URL || '❌ Not set (will use frontend config)'}`);
   console.log(`   WORKSHOP_SECRET: ${process.env.WORKSHOP_SECRET ? '✅ Set' : '❌ Not set'}`);
   console.log(`   PORT: ${PORT}`);
   

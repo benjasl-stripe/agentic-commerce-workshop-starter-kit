@@ -71,13 +71,18 @@ export async function loggedACPFetch(url, options = {}, metadata = {}) {
     const response = await fetch(url, options);
     const duration = Date.now() - startTime;
     
-    // Clone to read body
+    // Clone to read body (read as text first, then try to parse as JSON)
     const cloned = response.clone();
     let responseBody;
     try {
-      responseBody = await cloned.json();
+      const text = await cloned.text();
+      try {
+        responseBody = JSON.parse(text);
+      } catch {
+        responseBody = text;
+      }
     } catch {
-      responseBody = await cloned.text();
+      responseBody = '<unable to read body>';
     }
     
     // Complete log entry

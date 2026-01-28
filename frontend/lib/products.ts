@@ -25,8 +25,8 @@ export async function fetchProducts(apiUrl: string): Promise<Product[]> {
     console.log('fetchProducts: Received data:', data);
     
     // Handle different response formats
-    // Assume it's either an array directly or has a 'products' property
-    const products = Array.isArray(data) ? data : (data.products || []);
+    // Supports: array directly, { products: [] }, or { data: [] }
+    const products = Array.isArray(data) ? data : (data.products || data.data || []);
     
     console.log('fetchProducts: Parsed', products.length, 'products');
     return products;
