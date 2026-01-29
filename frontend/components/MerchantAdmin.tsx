@@ -45,7 +45,6 @@ export default function MerchantAdmin({ isOpen, onToggle }: MerchantAdminProps) 
 
   const getMerchantUrl = () => {
     const config = getConfig();
-    alert('DEBUG: productsApiUrl = ' + JSON.stringify(config.productsApiUrl));
     if (!config.productsApiUrl) {
       return null;
     }
