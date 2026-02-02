@@ -201,18 +201,24 @@ async function executeFunction(name, args, context) {
               }))
             };
           }
+          
+          // Confirmed: no payment methods on file - show the collection form
+          console.log('   💳 No payment method on file - requesting payment setup');
+          return {
+            success: true,
+            has_payment_method: false,
+            action: 'show_payment_setup',
+            message: args.reason || 'Please add a payment method to continue'
+          };
         } catch (err) {
+          // Error checking payment methods - don't show payment form, return error
           console.log(`   ⚠️ Could not check payment methods: ${err.message}`);
+          return {
+            success: false,
+            error: `Could not verify payment methods: ${err.message}`,
+            message: 'There was an issue checking your payment methods. Please try again.'
+          };
         }
-        
-        // No payment method found - show the collection form
-        console.log('   💳 No payment method on file - requesting payment setup');
-        return {
-          success: true,
-          has_payment_method: false,
-          action: 'show_payment_setup',
-          message: args.reason || 'Please add a payment method to continue'
-        };
       }
       
       default:
