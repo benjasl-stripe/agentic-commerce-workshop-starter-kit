@@ -320,7 +320,7 @@ export default function ChatInterface() {
 
   const clearCheckout = () => {
     setCheckoutState(null);
-    setHasPaymentMethod(false);
+    // Don't reset hasPaymentMethod - the card is still saved on the Agent backend
   };
 
   const clearChat = () => {
