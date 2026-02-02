@@ -199,22 +199,43 @@ router.get('/has-method', async (req, res) => {
 
 /**
  * Get customer's saved payment methods via proxy
+ * 
+ * TODO: Implement this function
+ * - Call the proxy to get payment methods for the email
+ * - Return the array of payment methods
  */
 export async function getCustomerPaymentMethods(email) {
-  const data = await callProxy(`/methods?email=${encodeURIComponent(email)}`);
-  return data.paymentMethods || [];
+  // TODO: Implement this function
+  // 
+  // const data = await callProxy(`/methods?email=${encodeURIComponent(email)}`);
+  // return data.paymentMethods || [];
+  
+  throw new Error('TODO: Implement getCustomerPaymentMethods');
 }
 
 /**
- * Create a Shared Payment Token via proxy
+ * Create a Shared Payment Token
+ * 
+ * TODO: Implement SPT creation
+ * - Get the user's saved payment method
+ * - Call the Stripe SPT API to create a token
+ * - Return the token for use in checkout completion
  */
 export async function createSPT(email, amount = 100000, currency = 'usd') {
-  const data = await callProxy('/create-spt', {
-    method: 'POST',
-    body: JSON.stringify({ email, amount, currency }),
-  });
+  // TODO: Implement this function
+  // 
+  // 1. Get the user's payment method from the proxy
+  // const methods = await callProxy(`/methods?email=${encodeURIComponent(email)}`);
+  // 
+  // 2. Call the proxy to create an SPT
+  // const data = await callProxy('/create-spt', {
+  //   method: 'POST',
+  //   body: JSON.stringify({ email, amount, currency }),
+  // });
+  // 
+  // return data;
   
-  return data;
+  throw new Error('TODO: Implement createSPT - create a Shared Payment Token for the user');
 }
 
 export default router;

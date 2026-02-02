@@ -2,7 +2,8 @@
  * Checkout Route
  * 
  * Manages ACP checkout sessions with the merchant backend
- * Supports per-request merchantUrl for workshop mode
+ * 
+ * TODO: Implement the ACP checkout functions to communicate with the Merchant
  */
 
 import express from 'express';
@@ -48,24 +49,8 @@ router.post('/create', async (req, res) => {
     console.log('🛒 Creating checkout via ACP:', items);
     console.log('   Merchant URL:', merchantUrl);
     
-    const body = { items };
-    if (buyer) body.buyer = buyer;
-    if (fulfillmentAddress) body.fulfillment_address = fulfillmentAddress;
-    
-    const response = await loggedACPFetch(`${merchantUrl}/checkouts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }, { endpoint: 'POST /checkouts', flow: 'Agent → Merchant' });
-    
-    const checkout = await response.json();
-    
-    if (!response.ok) {
-      console.error('ACP create error:', checkout);
-      return res.status(response.status).json(checkout);
-    }
-    
-    console.log('✅ Checkout created:', checkout.id);
+    // Call the exported function
+    const checkout = await createCheckout(items, buyer, merchantUrl);
     
     const { getPendingLogs } = await import('../lib/acp-call-logger.js');
     res.json({ ...checkout, acpLogs: getPendingLogs() });
@@ -87,16 +72,7 @@ router.get('/:id', async (req, res) => {
     
     console.log('📋 Getting checkout:', id);
     
-    const response = await loggedACPFetch(
-      `${merchantUrl}/checkouts/${id}`,
-      {},
-      { endpoint: 'GET /checkouts/:id', flow: 'Agent → Merchant' }
-    );
-    const checkout = await response.json();
-    
-    if (!response.ok) {
-      return res.status(response.status).json(checkout);
-    }
+    const checkout = await getCheckout(id, merchantUrl);
     
     const { getPendingLogs } = await import('../lib/acp-call-logger.js');
     res.json({ ...checkout, acpLogs: getPendingLogs() });
@@ -122,25 +98,11 @@ router.put('/:id', async (req, res) => {
     const updates = {};
     if (items) updates.items = items;
     if (buyer) updates.buyer = buyer;
-    if (fulfillmentAddress) updates.fulfillment_address = fulfillmentAddress;
-    if (fulfillmentOptionId) updates.fulfillment_option_id = fulfillmentOptionId;
+    if (fulfillmentAddress) updates.fulfillmentAddress = fulfillmentAddress;
+    if (fulfillmentOptionId) updates.fulfillmentOptionId = fulfillmentOptionId;
     
-    const response = await loggedACPFetch(`${merchantUrl}/checkouts/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    }, { endpoint: 'PUT /checkouts/:id', flow: 'Agent → Merchant' });
+    const checkout = await updateCheckout(id, updates, merchantUrl);
     
-    const checkout = await response.json();
-    
-    if (!response.ok) {
-      console.error('ACP update error:', checkout);
-      return res.status(response.status).json(checkout);
-    }
-    
-    console.log('✅ Checkout updated, status:', checkout.status);
-    
-    // Return logs with the response
     const { getPendingLogs } = await import('../lib/acp-call-logger.js');
     res.json({ ...checkout, acpLogs: getPendingLogs() });
     
@@ -166,28 +128,7 @@ router.post('/:id/complete', async (req, res) => {
     
     console.log('💳 Completing checkout:', id, 'with SPT');
     
-    const body = {
-      payment_data: {
-        token: paymentToken,
-        provider: 'stripe',
-      },
-    };
-    if (buyer) body.buyer = buyer;
-    
-    const response = await loggedACPFetch(`${merchantUrl}/checkouts/${id}/complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }, { endpoint: 'POST /checkouts/:id/complete', flow: 'Agent → Merchant' });
-    
-    const checkout = await response.json();
-    
-    if (!response.ok) {
-      console.error('ACP complete error:', checkout);
-      return res.status(response.status).json(checkout);
-    }
-    
-    console.log('✅ Checkout completed!');
+    const checkout = await completeCheckout(id, paymentToken, merchantUrl);
     
     const { getPendingLogs } = await import('../lib/acp-call-logger.js');
     res.json({ ...checkout, acpLogs: getPendingLogs() });
@@ -210,20 +151,7 @@ router.post('/:id/cancel', async (req, res) => {
     
     console.log('❌ Cancelling checkout:', id);
     
-    const response = await loggedACPFetch(`${merchantUrl}/checkouts/${id}/cancel`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason }),
-    }, { endpoint: 'POST /checkouts/:id/cancel', flow: 'Agent → Merchant' });
-    
-    const checkout = await response.json();
-    
-    if (!response.ok) {
-      console.error('ACP cancel error:', checkout);
-      return res.status(response.status).json(checkout);
-    }
-    
-    console.log('✅ Checkout cancelled');
+    const checkout = await cancelCheckout(id, reason, merchantUrl);
     
     const { getPendingLogs } = await import('../lib/acp-call-logger.js');
     res.json({ ...checkout, acpLogs: getPendingLogs() });
@@ -236,120 +164,72 @@ router.post('/:id/cancel', async (req, res) => {
 
 // ============================================================================
 // Exported Functions for use by chat.js (AI function calling)
-// These accept merchantUrl as a parameter for workshop mode
+// TODO: Implement these functions to call the Merchant's ACP endpoints
 // ============================================================================
 
 /**
  * Create a new checkout session
+ * 
+ * TODO: Call POST /checkouts on the Merchant service
+ * - Send items array and optional buyer info
+ * - Return the checkout object from the Merchant
  */
 export async function createCheckout(items, buyer, merchantUrl) {
-  const url = merchantUrl || getDefaultMerchantUrl();
-  const body = { items };
-  if (buyer) body.buyer = buyer;
+  // TODO: Implement this function
+  // 
+  // const body = { items };
+  // if (buyer) body.buyer = buyer;
+  // 
+  // const response = await loggedACPFetch(`${merchantUrl}/checkouts`, {
+  //   method: 'POST',
+  //   headers: { 'Content-Type': 'application/json' },
+  //   body: JSON.stringify(body),
+  // }, { endpoint: 'POST /checkouts', flow: 'Agent → Merchant' });
+  // 
+  // return await response.json();
   
-  const response = await loggedACPFetch(`${url}/checkouts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }, { endpoint: 'POST /checkouts', flow: 'Agent → Merchant' });
-  
-  const checkout = await response.json();
-  
-  if (!response.ok) {
-    throw new Error(checkout.error || 'Failed to create checkout');
-  }
-  
-  return checkout;
+  throw new Error('TODO: Implement createCheckout - call POST /checkouts on Merchant');
 }
 
 /**
  * Get checkout by ID
+ * 
+ * TODO: Call GET /checkouts/:id on the Merchant service
  */
 export async function getCheckout(checkoutId, merchantUrl) {
-  const url = merchantUrl || getDefaultMerchantUrl();
-  const response = await loggedACPFetch(
-    `${url}/checkouts/${checkoutId}`,
-    {},
-    { endpoint: 'GET /checkouts/:id', flow: 'Agent → Merchant' }
-  );
-  const checkout = await response.json();
-  
-  if (!response.ok) {
-    throw new Error(checkout.error || 'Failed to get checkout');
-  }
-  
-  return checkout;
+  // TODO: Implement this function
+  throw new Error('TODO: Implement getCheckout - call GET /checkouts/:id on Merchant');
 }
 
 /**
  * Update checkout with shipping address or fulfillment option
+ * 
+ * TODO: Call PUT /checkouts/:id on the Merchant service
  */
 export async function updateCheckout(checkoutId, updates, merchantUrl) {
-  const url = merchantUrl || getDefaultMerchantUrl();
-  const body = {};
-  if (updates.items) body.items = updates.items;
-  if (updates.buyer) body.buyer = updates.buyer;
-  if (updates.fulfillmentAddress) body.fulfillment_address = updates.fulfillmentAddress;
-  if (updates.fulfillmentOptionId) body.fulfillment_option_id = updates.fulfillmentOptionId;
-  
-  const response = await loggedACPFetch(`${url}/checkouts/${checkoutId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }, { endpoint: 'PUT /checkouts/:id', flow: 'Agent → Merchant' });
-  
-  const checkout = await response.json();
-  
-  if (!response.ok) {
-    throw new Error(checkout.error || 'Failed to update checkout');
-  }
-  
-  return checkout;
+  // TODO: Implement this function
+  throw new Error('TODO: Implement updateCheckout - call PUT /checkouts/:id on Merchant');
 }
 
 /**
  * Complete checkout with SPT payment token
+ * 
+ * TODO: Call POST /checkouts/:id/complete on the Merchant service
+ * - Send payment_data with the SPT token
  */
 export async function completeCheckout(checkoutId, paymentToken, merchantUrl) {
-  const url = merchantUrl || getDefaultMerchantUrl();
-  const response = await loggedACPFetch(`${url}/checkouts/${checkoutId}/complete`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      payment_data: {
-        token: paymentToken,
-        provider: 'stripe',
-      },
-    }),
-  }, { endpoint: 'POST /checkouts/:id/complete', flow: 'Agent → Merchant' });
-  
-  const checkout = await response.json();
-  
-  if (!response.ok) {
-    throw new Error(checkout.error || 'Failed to complete checkout');
-  }
-  
-  return checkout;
+  // TODO: Implement this function
+  throw new Error('TODO: Implement completeCheckout - call POST /checkouts/:id/complete on Merchant');
 }
 
 /**
  * Cancel a checkout
+ * 
+ * TODO: Call POST /checkouts/:id/cancel on the Merchant service
  */
 export async function cancelCheckout(checkoutId, reason, merchantUrl) {
-  const url = merchantUrl || getDefaultMerchantUrl();
-  const response = await loggedACPFetch(`${url}/checkouts/${checkoutId}/cancel`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reason }),
-  }, { endpoint: 'POST /checkouts/:id/cancel', flow: 'Agent → Merchant' });
-  
-  const checkout = await response.json();
-  
-  if (!response.ok) {
-    throw new Error(checkout.error || 'Failed to cancel checkout');
-  }
-  
-  return checkout;
+  // TODO: Implement this function
+  throw new Error('TODO: Implement cancelCheckout - call POST /checkouts/:id/cancel on Merchant');
 }
 
 export default router;
