@@ -13,6 +13,7 @@ import {
   cancelCheckout 
 } from './checkout.js';
 import { createSPT, getCustomerPaymentMethods } from './payment.js';
+import { profiles } from './profile.js';
 import { getPendingLogs } from '../lib/acp-call-logger.js';
 import { createChatCompletion } from '../lib/openai.js';
 
@@ -35,20 +36,73 @@ async function executeFunction(name, args, context) {
   try {
     switch (name) {
       case 'create_checkout': {
+        // Log what product IDs the AI is trying to use
+        console.log('   🛒 AI requested items:', JSON.stringify(args.items));
+        
         // Map product_id to id format expected by checkout
         const items = args.items.map(item => ({
           id: item.product_id,
           quantity: item.quantity || 1
         }));
         
-        const buyer = args.buyer_email ? { email: args.buyer_email } : undefined;
-        const result = await createCheckout(items, buyer, merchantUrl);
+        console.log('   📦 Mapped items for checkout:', JSON.stringify(items));
+        
+        // Get user profile to auto-fill buyer info
+        const userEmail = context.userEmail;
+        console.log(`   👤 Looking for profile with email: ${userEmail}`);
+        console.log(`   📋 Profiles in memory: ${[...profiles.keys()].join(', ') || 'none'}`);
+        
+        const userProfile = userEmail ? profiles.get(userEmail) : null;
+        
+        if (userProfile) {
+          console.log(`   ✅ Found profile for ${userEmail}:`);
+          console.log(`      Address: ${userProfile.address ? '✓' : '✗'}`);
+          console.log(`      Shipping: ${userProfile.shippingPreference || '✗'}`);
+          console.log(`      Payment: ${userProfile.paymentMethodId ? '✓' : '✗'}`);
+        } else {
+          console.log(`   ⚠️ No profile found for ${userEmail}`);
+        }
+        
+        const buyer = args.buyer_email 
+          ? { email: args.buyer_email, name: userProfile?.name } 
+          : (userEmail ? { email: userEmail, name: userProfile?.name } : undefined);
+        
+        let result = await createCheckout(items, buyer, merchantUrl, context.catalog);
         
         console.log(`   ✅ Checkout created: ${result.id}`);
+        
+        // If user has saved address and shipping preference, auto-apply them
+        if (userProfile?.address && userProfile?.shippingPreference) {
+          console.log('   📍 Auto-applying saved profile address & shipping');
+          console.log('   Address:', JSON.stringify(userProfile.address));
+          console.log('   Shipping:', userProfile.shippingPreference);
+          try {
+            // Map profile address to checkout format
+            const fulfillmentAddress = {
+              name: userProfile.name || userProfile.address.name || 'Customer',
+              line_one: userProfile.address.line_one,
+              line_two: userProfile.address.line_two || '',
+              city: userProfile.address.city,
+              state: userProfile.address.state,
+              postal_code: userProfile.address.postal_code,
+              country: userProfile.address.country_code || userProfile.address.country || 'US',
+            };
+            
+            result = await updateCheckout(result.id, {
+              fulfillmentAddress,
+              fulfillmentOptionId: userProfile.shippingPreference
+            }, merchantUrl);
+            console.log(`   ✅ Profile applied, status: ${result.status}`);
+          } catch (err) {
+            console.log(`   ⚠️ Could not auto-apply profile: ${err.message}`);
+          }
+        }
+        
         return {
           success: true,
           checkout: result,
-          message: `Checkout ${result.id} created successfully`
+          message: `Checkout ${result.id} created successfully`,
+          profile_applied: !!(userProfile?.address && userProfile?.shippingPreference)
         };
       }
       
@@ -64,9 +118,12 @@ async function executeFunction(name, args, context) {
       case 'update_checkout': {
         const updates = {};
         
+        // Check if user has saved profile
+        const userProfile = context.userEmail ? profiles.get(context.userEmail) : null;
+        
         if (args.shipping_address) {
           updates.fulfillmentAddress = {
-            name: args.shipping_address.name || 'Customer',
+            name: args.shipping_address.name || userProfile?.name || 'Customer',
             line_one: args.shipping_address.line_one,
             line_two: args.shipping_address.line_two,
             city: args.shipping_address.city,
@@ -74,15 +131,23 @@ async function executeFunction(name, args, context) {
             postal_code: args.shipping_address.postal_code,
             country: args.shipping_address.country || 'US'
           };
+        } else if (args.use_saved_address && userProfile?.address) {
+          // Use saved address from profile
+          console.log('   📍 Using saved address from profile');
+          updates.fulfillmentAddress = userProfile.address;
         }
         
         if (args.fulfillment_option_id) {
           updates.fulfillmentOptionId = args.fulfillment_option_id;
+        } else if (args.use_saved_shipping && userProfile?.shippingPreference) {
+          // Use saved shipping preference from profile
+          console.log('   🚚 Using saved shipping preference from profile');
+          updates.fulfillmentOptionId = userProfile.shippingPreference;
         }
         
         // Default to standard shipping if address provided but no option
         if (updates.fulfillmentAddress && !updates.fulfillmentOptionId) {
-          updates.fulfillmentOptionId = 'shipping_standard';
+          updates.fulfillmentOptionId = userProfile?.shippingPreference || 'shipping_standard';
         }
         
         const result = await updateCheckout(args.checkout_id, updates, merchantUrl);
@@ -90,7 +155,8 @@ async function executeFunction(name, args, context) {
         return {
           success: true,
           checkout: result,
-          message: `Checkout updated. Status: ${result.status}`
+          message: `Checkout updated. Status: ${result.status}`,
+          used_saved_profile: !!(args.use_saved_address || args.use_saved_shipping)
         };
       }
       
@@ -305,7 +371,7 @@ function sanitizeMessages(messages) {
  */
 router.post('/', async (req, res) => {
   try {
-    const { messages, checkoutState, userEmail, aiPersona, merchantUrl, productsApiUrl, lambdaEndpoint } = req.body;
+    const { messages, checkoutState, userEmail, userProfile, aiPersona, merchantUrl, productsApiUrl, lambdaEndpoint } = req.body;
     
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array required' });
@@ -320,10 +386,18 @@ router.post('/', async (req, res) => {
     // Get Lambda endpoint from request or use default
     const effectiveLambdaEndpoint = lambdaEndpoint || process.env.LAMBDA_ENDPOINT;
     
+    // If userProfile is sent from frontend, sync it to our in-memory store
+    // This ensures profile persists across Agent restarts
+    if (userProfile && userEmail) {
+      profiles.set(userEmail, userProfile);
+      console.log('   📋 Profile synced from frontend');
+    }
+    
     console.log('\n📨 Chat request received');
     console.log('   Messages:', messages.length, sanitizedMessages.length !== messages.length ? `(sanitized to ${sanitizedMessages.length})` : '');
     console.log('   Checkout:', checkoutState?.id || 'none');
     console.log('   User:', userEmail || 'anonymous');
+    console.log('   Profile:', userProfile ? `✓ (address: ${userProfile.address ? '✓' : '✗'}, shipping: ${userProfile.shippingPreference || '✗'})` : '✗');
     console.log('   Merchant:', effectiveMerchantUrl);
     console.log('   Products URL:', productsApiUrl || '❌ NOT SET');
     console.log('   Lambda:', effectiveLambdaEndpoint || 'not set');
@@ -372,11 +446,22 @@ router.post('/', async (req, res) => {
       });
     }
     
+    // Extract catalog name from productsApiUrl (e.g., /api/tv -> tv, /api/skis -> skis)
+    let catalogName = null;
+    if (effectiveProductsUrl) {
+      const match = effectiveProductsUrl.match(/\/api\/([^\/\?]+)/);
+      if (match) {
+        catalogName = match[1];
+        console.log('   📦 Catalog:', catalogName);
+      }
+    }
+    
     // Context for function execution (includes merchantUrl for workshop mode)
     const context = {
       userEmail,
       checkoutState,
-      merchantUrl: effectiveMerchantUrl
+      merchantUrl: effectiveMerchantUrl,
+      catalog: catalogName
     };
     
     // Track the current checkout state and user email
@@ -401,6 +486,7 @@ router.post('/', async (req, res) => {
           checkoutState: currentCheckout,
           products,
           aiPersona,
+          userProfile,
           lambdaEndpoint: effectiveLambdaEndpoint
         });
         

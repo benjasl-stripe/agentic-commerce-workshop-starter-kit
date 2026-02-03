@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { loadStripe, Stripe } from '@stripe/stripe-js';
+import { loadStripe, Stripe, Appearance } from '@stripe/stripe-js';
 import {
   Elements,
-  CardElement,
+  PaymentElement,
   useStripe,
   useElements,
 } from '@stripe/react-stripe-js';
-import { getStripeConfig, savePaymentMethod, getPaymentMethods, SavedPaymentMethod } from '@/lib/api';
-import { getConfig } from '@/lib/config';
+import { getStripeConfig, createSetupIntent, savePaymentMethod } from '@/lib/api';
+import { getConfig, getOrCreateCustomerId } from '@/lib/config';
 
 interface PaymentSetupProps {
   onSuccess: (paymentMethodId: string) => void;
@@ -17,32 +17,38 @@ interface PaymentSetupProps {
   email?: string;
 }
 
-// Card Element styling
-const cardElementOptions = {
-  style: {
-    base: {
-      fontSize: '16px',
-      color: '#1f2937',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      '::placeholder': {
-        color: '#9ca3af',
-      },
-      iconColor: '#7c3aed',
+// Payment Element appearance customization
+const appearance: Appearance = {
+  theme: 'stripe',
+  variables: {
+    colorPrimary: '#7c3aed',
+    colorBackground: '#ffffff',
+    colorText: '#1f2937',
+    colorDanger: '#ef4444',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    borderRadius: '8px',
+    spacingUnit: '4px',
+  },
+  rules: {
+    '.Input': {
+      border: '2px solid #e5e7eb',
+      boxShadow: 'none',
     },
-    invalid: {
-      color: '#ef4444',
-      iconColor: '#ef4444',
+    '.Input:focus': {
+      border: '2px solid #7c3aed',
+      boxShadow: '0 0 0 1px #7c3aed',
+    },
+    '.Label': {
+      fontWeight: '500',
+      marginBottom: '6px',
     },
   },
-  hidePostalCode: false,
 };
 
 // Inner form component that uses Stripe hooks
 function SetupForm({ onSuccess, onCancel, email }: PaymentSetupProps) {
-  // TODO: Use the useStripe() and useElements() hooks
-  // These hooks give you access to the Stripe object and Elements instance
-  const stripe = null;    // Replace with: useStripe();
-  const elements = null;  // Replace with: useElements();
+  const stripe = useStripe();
+  const elements = useElements();
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,46 +60,38 @@ function SetupForm({ onSuccess, onCancel, email }: PaymentSetupProps) {
       return;
     }
     
-    // TODO: Get the CardElement from elements
-    // Hint: Use elements.getElement(CardElement)
-    const cardElement = null; // Replace with: elements.getElement(CardElement);
-    
-    if (!cardElement) {
-      setError('Card element not found');
-      return;
-    }
-    
     setIsLoading(true);
     setError(null);
     
     try {
-      // TODO: Create a PaymentMethod using stripe.createPaymentMethod()
-      // This sends card details directly to Stripe (never touches your server)
-      // 
-      // const { error: pmError, paymentMethod } = await stripe.createPaymentMethod({
-      //   type: 'card',
-      //   card: cardElement,
-      // });
+      // Confirm the SetupIntent with Payment Element
+      const { error: submitError, setupIntent } = await stripe.confirmSetup({
+        elements,
+        confirmParams: {
+          return_url: window.location.href,
+        },
+        redirect: 'if_required',
+      });
       
-      const pmError = { message: 'TODO: Implement createPaymentMethod' };
-      const paymentMethod = null;
-      
-      if (pmError) {
-        setError(pmError.message || 'Failed to process card');
+      if (submitError) {
+        setError(submitError.message || 'Failed to save payment method');
         return;
       }
       
-      if (paymentMethod) {
-        // TODO: Save the payment method to the Agent backend
-        // The Agent stores the payment method ID for creating SPTs later
-        //
-        // const config = getConfig();
-        // const userEmail = email || config.userEmail;
-        // if (userEmail) {
-        //   await savePaymentMethod(userEmail, paymentMethod.id);
-        // }
+      if (setupIntent && setupIntent.payment_method) {
+        // Save the payment method to the Agent backend
+        const userEmail = email || getUserEmail();
+        const paymentMethodId = typeof setupIntent.payment_method === 'string' 
+          ? setupIntent.payment_method 
+          : setupIntent.payment_method.id;
         
-        onSuccess(paymentMethod.id);
+        if (!userEmail) {
+          setError('Please set your email in Profile Settings first');
+          return;
+        }
+        
+        await savePaymentMethod(userEmail, paymentMethodId);
+        onSuccess(paymentMethodId);
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred');
@@ -104,9 +102,14 @@ function SetupForm({ onSuccess, onCancel, email }: PaymentSetupProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="p-4 border-2 border-gray-200 rounded-lg focus-within:border-purple-500 transition-colors bg-white">
-        <CardElement options={cardElementOptions} />
-      </div>
+      <PaymentElement 
+        options={{
+          layout: 'accordion',
+          defaultCollapsed: false,
+          radios: true,
+          spacedAccordionItems: true,
+        }}
+      />
       
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm">
@@ -120,7 +123,7 @@ function SetupForm({ onSuccess, onCancel, email }: PaymentSetupProps) {
           disabled={!stripe || isLoading}
           className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-bold py-3 rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
         >
-          {isLoading ? '⏳ Saving...' : '💳 Save Card'}
+          {isLoading ? '⏳ Saving...' : '💳 Save Payment Method'}
         </button>
         <button
           type="button"
@@ -135,9 +138,10 @@ function SetupForm({ onSuccess, onCancel, email }: PaymentSetupProps) {
   );
 }
 
-// Main component that loads Stripe and wraps the form
+// Main component that loads Stripe and creates SetupIntent
 export default function PaymentSetup({ onSuccess, onCancel, email }: PaymentSetupProps) {
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -164,9 +168,14 @@ export default function PaymentSetup({ onSuccess, onCancel, email }: PaymentSetu
           return;
         }
         
-        // TODO: Load Stripe with the publishable key
-        // Hint: Use loadStripe(publishableKey)
-        setStripePromise(null); // Replace with: setStripePromise(loadStripe(publishableKey));
+        // Load Stripe
+        setStripePromise(loadStripe(publishableKey));
+        
+        // Create SetupIntent for Payment Element
+        // Use provided email, or get/create a customer identifier (allows saving cards without email)
+        const customerId = email || getOrCreateCustomerId();
+        const setupIntent = await createSetupIntent(customerId);
+        setClientSecret(setupIntent.clientSecret);
         
       } catch (err: any) {
         setError(err.message || 'Failed to initialize payment');
@@ -205,32 +214,35 @@ export default function PaymentSetup({ onSuccess, onCancel, email }: PaymentSetu
     );
   }
 
-  if (!stripePromise) {
+  if (!stripePromise || !clientSecret) {
     return (
       <div className="bg-white p-6 rounded-2xl shadow-lg">
         <div className="text-center text-gray-600">
-          Unable to load payment form. Complete the TODOs in PaymentSetup.tsx!
+          Unable to load payment form. Please check your configuration.
         </div>
       </div>
     );
   }
 
-  // TODO: Wrap SetupForm with the Elements provider
-  // The Elements provider gives child components access to Stripe
   return (
     <div className="bg-white p-6 rounded-2xl shadow-lg">
       <h3 className="text-lg font-bold text-gray-800 mb-4">💳 Add Payment Method</h3>
       <p className="text-sm text-gray-600 mb-4">
-        Enter your card details securely.
+        Choose your preferred payment method.
       </p>
       
-      {/* TODO: Wrap SetupForm with Elements provider */}
-      {/* <Elements stripe={stripePromise}> */}
+      <Elements 
+        stripe={stripePromise} 
+        options={{ 
+          clientSecret,
+          appearance,
+        }}
+      >
         <SetupForm onSuccess={onSuccess} onCancel={onCancel} email={email} />
-      {/* </Elements> */}
+      </Elements>
       
       <p className="text-xs text-gray-500 mt-4 text-center">
-        🔒 Secured by Stripe. Your card details are never stored on our servers.
+        🔒 Secured by Stripe. Your payment details are never stored on our servers.
       </p>
     </div>
   );

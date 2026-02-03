@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getConfig, saveConfig, DEFAULT_AI_PERSONA } from '@/lib/config';
+import { getPersonaList, getPersonaContent } from '@/lib/personas';
 
 interface ConfigModalProps {
   onClose: () => void;
@@ -63,7 +64,6 @@ function CollapsibleSection({
 export default function ConfigModal({ onClose }: ConfigModalProps) {
   const [productsApiUrl, setProductsApiUrl] = useState('');
   const [stripePublishableKey, setStripePublishableKey] = useState('');
-  const [userEmail, setUserEmail] = useState('');
   const [aiPersona, setAiPersona] = useState('');
   const [testMode, setTestMode] = useState(false);
 
@@ -71,7 +71,6 @@ export default function ConfigModal({ onClose }: ConfigModalProps) {
     const config = getConfig();
     setProductsApiUrl(config.productsApiUrl || '');
     setStripePublishableKey(config.stripePublishableKey || '');
-    setUserEmail(config.userEmail || '');
     setAiPersona(config.aiPersona || '');
     setTestMode(config.testMode || false);
   }, []);
@@ -80,7 +79,6 @@ export default function ConfigModal({ onClose }: ConfigModalProps) {
     saveConfig({ 
       productsApiUrl,
       stripePublishableKey,
-      userEmail,
       aiPersona,
       testMode 
     });
@@ -111,8 +109,37 @@ export default function ConfigModal({ onClose }: ConfigModalProps) {
           >
             <div>
               <p className="text-xs text-gray-500 mb-3">
-                Customize how the AI assistant behaves. Leave empty for default.
+                Choose a preset or customize how the AI assistant behaves.
               </p>
+              
+              {/* Persona Dropdown */}
+              <div className="mb-3">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Preset Personas
+                </label>
+                <select
+                  onChange={(e) => {
+                    const content = getPersonaContent(e.target.value);
+                    if (content) {
+                      setAiPersona(content);
+                    }
+                  }}
+                  className="w-full p-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-600 text-gray-900 text-sm"
+                  defaultValue=""
+                >
+                  <option value="" disabled>Select a persona...</option>
+                  {getPersonaList().map((persona) => (
+                    <option key={persona.id} value={persona.id}>
+                      {persona.name} - {persona.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Custom Textarea */}
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Custom Persona (or edit preset)
+              </label>
               <textarea
                 value={aiPersona}
                 onChange={(e) => setAiPersona(e.target.value)}
@@ -130,7 +157,7 @@ export default function ConfigModal({ onClose }: ConfigModalProps) {
                     onClick={() => setAiPersona('')}
                     className="text-xs text-blue-600 hover:text-blue-800"
                   >
-                    Reset
+                    Reset to Default
                   </button>
                 )}
               </div>
@@ -178,30 +205,6 @@ export default function ConfigModal({ onClose }: ConfigModalProps) {
               />
               <p className="text-xs text-gray-500 mt-1">
                 Stripe publishable key for payment collection (pk_test_...)
-              </p>
-            </div>
-          </CollapsibleSection>
-
-          {/* User Info Section */}
-          <CollapsibleSection
-            title="User Info (for Checkout)"
-            icon="👤"
-            bgColor="bg-orange-50"
-            textColor="text-orange-800"
-          >
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Your Email
-              </label>
-              <input
-                type="email"
-                value={userEmail}
-                onChange={(e) => setUserEmail(e.target.value)}
-                placeholder="your@email.com"
-                className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-orange-600 text-gray-900"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Used for storing payment methods and creating SPT tokens
               </p>
             </div>
           </CollapsibleSection>

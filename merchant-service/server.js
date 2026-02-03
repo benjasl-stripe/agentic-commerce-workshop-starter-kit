@@ -5,6 +5,7 @@ import productsRouter from './routes/products.js';
 import healthRouter from './routes/health.js';
 import checkoutsRouter from './routes/checkouts.js';
 import catalogRouter from './routes/catalog.js';
+import webhooksRouter from './routes/webhooks.js';
 
 // Load environment variables
 dotenv.config();
@@ -14,6 +15,11 @@ const PORT = process.env.PORT || 4000;
 
 // Middleware
 app.use(cors()); // Enable CORS for all routes
+
+// IMPORTANT: Webhooks must be mounted BEFORE express.json() 
+// because they need the raw request body for signature verification
+app.use('/webhooks', webhooksRouter);
+
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
@@ -41,6 +47,7 @@ app.get('/', (req, res) => {
       products: '/api/products',
       health: '/api/health',
       checkouts: '/checkouts',
+      webhooks: '/webhooks/stripe',
     },
     acp: {
       version: '1.0.0',
@@ -80,6 +87,7 @@ app.listen(PORT, () => {
   console.log(`📂 JSON Catalogs: http://localhost:${PORT}/api/{filename} (e.g., /api/skis for lib/skis.json)`);
   console.log(`💚 Health Check: http://localhost:${PORT}/api/health`);
   console.log(`🛒 ACP Checkouts: http://localhost:${PORT}/checkouts`);
+  console.log(`🔔 Webhooks: http://localhost:${PORT}/webhooks/stripe`);
   console.log(`\nPress Ctrl+C to stop\n`);
 });
 

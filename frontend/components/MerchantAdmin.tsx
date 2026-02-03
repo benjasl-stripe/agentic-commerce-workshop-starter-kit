@@ -23,11 +23,68 @@ interface SaleRecord {
   timestamp: string;
 }
 
-interface SalesData {
-  totalRevenue: number;
-  totalItemsSold: number;
-  totalOrders: number;
-  history: SaleRecord[];
+interface CompletedOrder {
+  id: string;
+  orderId: string;
+  completedAt: string;
+  total: number;
+  items: Array<{
+    id: string;
+    title: string;
+    quantity: number;
+    total: number;
+  }>;
+}
+
+// localStorage key for completed orders
+const ORDERS_STORAGE_KEY = 'acpCompletedOrders';
+
+// Helper to load orders from localStorage
+function loadCompletedOrders(): CompletedOrder[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(ORDERS_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Helper to save an order to localStorage
+export function saveCompletedOrder(checkout: any): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const orders = loadCompletedOrders();
+    
+    // Don't add duplicates
+    if (orders.some(o => o.id === checkout.id)) return;
+    
+    const order: CompletedOrder = {
+      id: checkout.id,
+      orderId: checkout.order?.id || checkout.id,
+      completedAt: checkout.completed_at || new Date().toISOString(),
+      total: checkout.totals?.find((t: any) => t.type === 'total')?.amount || 0,
+      items: checkout.line_items?.map((item: any) => ({
+        id: item.id,
+        title: item.title || item.id,
+        quantity: item.quantity || 1,
+        total: item.total || 0,
+      })) || [],
+    };
+    
+    orders.unshift(order); // Add to beginning
+    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders.slice(0, 50))); // Keep last 50
+    
+    console.log('💰 Order saved to localStorage:', order.orderId);
+  } catch (err) {
+    console.error('Failed to save order:', err);
+  }
+}
+
+// Helper to clear orders from localStorage
+export function clearCompletedOrders(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(ORDERS_STORAGE_KEY);
 }
 
 interface MerchantAdminProps {
@@ -103,7 +160,16 @@ export default function MerchantAdmin({ isOpen, onToggle }: MerchantAdminProps) 
           setError('Failed to fetch products');
         }
       }
-      setSales(null); // Sales tracking not available for JSON catalogs
+      // Load completed orders from localStorage (frontend-only tracking)
+      const orders = loadCompletedOrders();
+      const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
+      const totalItems = orders.reduce((sum, o) => o.items.reduce((s, i) => s + i.quantity, 0) + sum, 0);
+      setSales({
+        totalOrders: orders.length,
+        totalRevenue,
+        totalItemsSold: totalItems,
+        orders,
+      } as any);
     } catch (err: any) {
       setError(err.message || 'Connection failed');
     }
@@ -371,14 +437,14 @@ export default function MerchantAdmin({ isOpen, onToggle }: MerchantAdminProps) 
         {getCatalogBaseUrl() && activeTab === 'sales' && (
           <div className="p-3">
             {/* Sales Summary */}
-            {sales && (
+            {sales ? (
               <>
-                <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="grid grid-cols-2 gap-2 mb-4">
                   <div className="bg-green-900/30 rounded-lg p-2 text-center">
                     <div className="text-green-400 text-lg font-bold">
-                      ${sales.totalRevenue.toFixed(2)}
+                      {sales.totalOrders}
                     </div>
-                    <div className="text-[9px] text-gray-500">Revenue</div>
+                    <div className="text-[9px] text-gray-500">Orders</div>
                   </div>
                   <div className="bg-blue-900/30 rounded-lg p-2 text-center">
                     <div className="text-blue-400 text-lg font-bold">
@@ -386,47 +452,57 @@ export default function MerchantAdmin({ isOpen, onToggle }: MerchantAdminProps) 
                     </div>
                     <div className="text-[9px] text-gray-500">Items Sold</div>
                   </div>
-                  <div className="bg-purple-900/30 rounded-lg p-2 text-center">
-                    <div className="text-purple-400 text-lg font-bold">
-                      {sales.totalOrders}
-                    </div>
-                    <div className="text-[9px] text-gray-500">Orders</div>
-                  </div>
                 </div>
 
-                {/* Sales History */}
-                <div className="text-[10px] text-gray-500 mb-2">Recent Sales</div>
-                {sales.history.length === 0 ? (
-                  <div className="text-center py-8 text-gray-600">
-                    <div className="text-2xl mb-2">📊</div>
-                    <div className="text-[11px]">No sales yet</div>
-                    <div className="text-[10px] text-gray-700">Complete a checkout to see sales here</div>
-                  </div>
-                ) : (
+                {/* Orders List from localStorage */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[10px] text-gray-500">🛒 Recent Orders</div>
+                  {(sales as any).orders?.length > 0 && (
+                    <button
+                      onClick={() => {
+                        clearCompletedOrders();
+                        fetchStatus();
+                        addLog('🗑️ Cleared order history');
+                      }}
+                      className="text-[9px] px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-gray-400 rounded"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {(sales as any).orders && (sales as any).orders.length > 0 ? (
                   <div className="space-y-2">
-                    {sales.history.slice(0, 10).map((sale) => (
-                      <div key={sale.id} className="bg-gray-800/50 rounded p-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-300 text-[11px] truncate flex-1" title={sale.productTitle}>
-                            {sale.productTitle.substring(0, 25)}...
-                          </span>
+                    {(sales as any).orders.slice(0, 10).map((order: CompletedOrder) => (
+                      <div key={order.id} className="bg-gray-800/50 rounded p-2">
+                        <div className="flex items-center justify-between mb-1">
                           <span className="text-green-400 text-[11px] font-bold">
-                            ${sale.totalAmount.toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-gray-600 text-[9px]">
-                            Qty: {sale.quantity} × ${sale.pricePerUnit.toFixed(2)}
+                            ${((order.total || 0) / 100).toFixed(2)}
                           </span>
                           <span className="text-gray-600 text-[9px]">
-                            {new Date(sale.timestamp).toLocaleTimeString()}
+                            {new Date(order.completedAt).toLocaleTimeString()}
                           </span>
                         </div>
+                        {order.items.map((item, idx) => (
+                          <div key={idx} className="text-gray-400 text-[10px]">
+                            {item.quantity}x {item.title}
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-600">
+                    <div className="text-2xl mb-2">🛒</div>
+                    <div className="text-[11px]">No orders yet</div>
+                    <div className="text-[10px] text-gray-700">Complete a purchase to see it here</div>
+                  </div>
                 )}
               </>
+            ) : (
+              <div className="text-center py-8 text-gray-600">
+                <div className="text-2xl mb-2">📊</div>
+                <div className="text-[11px]">Loading...</div>
+              </div>
             )}
           </div>
         )}

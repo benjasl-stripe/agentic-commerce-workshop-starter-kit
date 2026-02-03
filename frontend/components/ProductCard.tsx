@@ -2,17 +2,22 @@ import { Product } from '@/lib/products';
 
 interface ProductCardProps {
   product: Product;
+  onClick?: (product: Product) => void;
 }
 
-export default function ProductCard({ product }: ProductCardProps) {
+export default function ProductCard({ product, onClick }: ProductCardProps) {
   const price = typeof product.price === 'number' 
     ? `$${product.price.toFixed(2)}` 
     : product.price;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:shadow-sm transition-all p-3 flex items-center gap-3 min-w-[280px] max-w-[320px]">
+    <div 
+      className={`bg-white border border-gray-200 rounded-lg hover:border-purple-400 hover:shadow-md transition-all p-3 flex items-center gap-3 min-w-[280px] max-w-[320px] group ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={() => onClick?.(product)}
+      title={onClick ? 'Click to buy this item' : undefined}
+    >
       {/* Compact Icon */}
-      <div className="w-10 h-10 bg-gradient-to-br from-purple-50 to-indigo-100 rounded-lg flex items-center justify-center text-lg flex-shrink-0">
+      <div className="w-10 h-10 bg-gradient-to-br from-purple-50 to-indigo-100 rounded-lg flex items-center justify-center text-lg flex-shrink-0 group-hover:from-purple-100 group-hover:to-indigo-200 transition-all">
         📦
       </div>
       
@@ -41,6 +46,13 @@ export default function ProductCard({ product }: ProductCardProps) {
           {product.rating && (
             <span className="text-[10px] text-gray-500">
               ⭐ {product.rating}
+            </span>
+          )}
+
+          {/* Buy indicator on hover */}
+          {onClick && (
+            <span className="text-[10px] text-purple-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity ml-auto">
+              🛒 Click to buy
             </span>
           )}
         </div>

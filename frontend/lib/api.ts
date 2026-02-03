@@ -1,4 +1,4 @@
-import { getConfig } from './config';
+import { getConfig, getUserEmail, type Config } from './config';
 import type { Product } from './products';
 import { formatProductsForAI } from './products';
 import { loggedFetch, addExternalLogs } from './acp-logger';
@@ -102,6 +102,18 @@ export async function sendChatMessage(
   // Pass merchant URL for workshop mode (agent uses this for ACP calls)
   const merchantUrl = getMerchantUrl(config);
   
+  // Get email and full profile from localStorage
+  const userEmail = getUserEmail();
+  let userProfile = null;
+  try {
+    const profileStr = typeof window !== 'undefined' ? localStorage.getItem('userProfile') : null;
+    if (profileStr) {
+      userProfile = JSON.parse(profileStr);
+    }
+  } catch (err) {
+    console.warn('Could not read user profile:', err);
+  }
+  
   const response = await loggedFetch(`${agentUrl}/api/chat`, {
     method: 'POST',
     headers: {
@@ -110,7 +122,8 @@ export async function sendChatMessage(
     body: JSON.stringify({
       messages,
       checkoutState: checkoutState || null,
-      userEmail: config.userEmail || null,
+      userEmail: userEmail || null,
+      userProfile: userProfile || null, // Send full profile so Agent can auto-apply
       aiPersona: config.aiPersona || null,
       merchantUrl: merchantUrl || null,
       productsApiUrl: config.productsApiUrl || null,
@@ -362,6 +375,44 @@ export async function getPaymentMethods(email: string): Promise<{
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.message || error.error || 'Failed to get payment methods');
+  }
+  
+  return await response.json();
+}
+
+export async function deletePaymentMethods(email: string): Promise<{ success: boolean }> {
+  const config = getConfig();
+  const agentUrl = config.agentServiceUrl || 'http://localhost:3001';
+  
+  const response = await loggedFetch(`${agentUrl}/api/payment/methods?email=${encodeURIComponent(email)}`, {
+    method: 'DELETE',
+    acpEndpoint: 'Delete Payment Methods',
+    acpFlow: 'Frontend → Agent',
+  });
+  
+  // Don't throw on error - clearing session should still work
+  if (!response.ok) {
+    console.warn('Could not delete payment methods from server');
+    return { success: false };
+  }
+  
+  return await response.json();
+}
+
+export async function deleteProfile(email: string): Promise<{ success: boolean }> {
+  const config = getConfig();
+  const agentUrl = config.agentServiceUrl || 'http://localhost:3001';
+  
+  const response = await loggedFetch(`${agentUrl}/api/profile?email=${encodeURIComponent(email)}`, {
+    method: 'DELETE',
+    acpEndpoint: 'Delete Profile',
+    acpFlow: 'Frontend → Agent',
+  });
+  
+  // Don't throw on error - clearing session should still work
+  if (!response.ok) {
+    console.warn('Could not delete profile from server');
+    return { success: false };
   }
   
   return await response.json();

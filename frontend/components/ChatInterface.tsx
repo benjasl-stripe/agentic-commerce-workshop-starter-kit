@@ -4,18 +4,17 @@ import { useState, useRef, useEffect } from 'react';
 import { 
   sendChatMessage, 
   CheckoutState,
-  updateCheckout,
-  getPaymentMethods
+  getPaymentMethods,
+  deletePaymentMethods,
+  deleteProfile
 } from '@/lib/api';
 import { fetchProducts, Product } from '@/lib/products';
-import { getConfig, saveConfig } from '@/lib/config';
+import { getConfig, getUserEmail, getOrCreateCustomerId, clearAnonymousCustomerId } from '@/lib/config';
 import ConfigModal from './ConfigModal';
 import MessageRenderer from './MessageRenderer';
-import PaymentSetup from './PaymentSetup';
-import OrderConfirmation from './OrderConfirmation';
-import AddressForm from './AddressForm';
-import ShippingOptions from './ShippingOptions';
-import CartSummary from './CartSummary';
+import ProfileSettings from './ProfileSettings';
+import BasketDrawer from './BasketDrawer';
+import { saveCompletedOrder } from './MerchantAdmin';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -93,15 +92,16 @@ export default function ChatInterface() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const [showPaymentSetup, setShowPaymentSetup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Products are populated from LLM responses only (not fetched directly from API)
   const [products, setProducts] = useState<Product[]>([]);
   const [checkoutState, setCheckoutState] = useState<CheckoutState | null>(null);
   const [hasPaymentMethod, setHasPaymentMethod] = useState(false);
   const [userEmail, setUserEmail] = useState('');
-  const [showAddressForm, setShowAddressForm] = useState(false);
-  const [isUpdatingCheckout, setIsUpdatingCheckout] = useState(false);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
+  const [profileInitialTab, setProfileInitialTab] = useState<'info' | 'address' | 'shipping' | 'payment'>('info');
+  const [profileComplete, setProfileComplete] = useState(false);
+  const [showBasket, setShowBasket] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [hasLoadedFromStorage, setHasLoadedFromStorage] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -118,10 +118,10 @@ export default function ChatInterface() {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
     // Refocus input after messages update
-    if (inputRef.current && !showPaymentSetup && !showAddressForm) {
+    if (inputRef.current) {
       inputRef.current.focus();
     }
-  }, [messages, showPaymentSetup, showAddressForm]);
+  }, [messages]);
 
   // Focus input on mount
   useEffect(() => {
@@ -130,10 +130,9 @@ export default function ChatInterface() {
     }
   }, []);
 
-  // Load config on mount
+  // Load user email from profile on mount
   useEffect(() => {
-    const config = getConfig();
-    setUserEmail(config.userEmail || '');
+    setUserEmail(getUserEmail());
   }, []);
 
   // Load persisted chat on mount
@@ -141,6 +140,11 @@ export default function ChatInterface() {
     if (!mounted) return;
 
     const persisted = loadPersistedChat();
+    console.log('📦 Loaded from localStorage:', {
+      messages: persisted.messages.length,
+      checkoutId: persisted.checkoutState?.id || 'none',
+      checkoutItems: persisted.checkoutState?.line_items?.map(i => i.title) || []
+    });
     if (persisted.messages.length > 0) {
       setMessages(persisted.messages);
     }
@@ -181,106 +185,73 @@ export default function ChatInterface() {
     loadProducts();
   }, []);
 
-  // Check for existing payment methods when user email is set
+  // Check for existing payment methods (uses email OR anonymous customer ID)
   useEffect(() => {
-    if (!mounted || !userEmail) return;
+    if (!mounted) return;
     
     const checkPaymentMethods = async () => {
       try {
         const config = getConfig();
         if (!config.agentServiceUrl) return;
         
-        const result = await getPaymentMethods(userEmail);
+        // Use customer ID (email if set, otherwise anonymous ID if exists)
+        const customerId = getUserEmail() || localStorage.getItem('anonymousCustomerId');
+        if (!customerId) {
+          setHasPaymentMethod(false);
+          return;
+        }
+        
+        const result = await getPaymentMethods(customerId);
         if (result.paymentMethods && result.paymentMethods.length > 0) {
           console.log(`💳 Found ${result.paymentMethods.length} existing payment method(s)`);
           setHasPaymentMethod(true);
+        } else {
+          // No payment methods - clear the state
+          console.log('💳 No payment methods found');
+          setHasPaymentMethod(false);
         }
       } catch (err) {
-        // Silently fail - user might not have payment methods yet
+        // Error checking - assume no payment methods
         console.log('Could not check payment methods:', err);
+        setHasPaymentMethod(false);
+      }
+    };
+    
+    const checkProfile = async () => {
+      try {
+        const config = getConfig();
+        if (!config.agentServiceUrl) return;
+        
+        const res = await fetch(`${config.agentServiceUrl}/api/profile/check?email=${encodeURIComponent(userEmail)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setProfileComplete(data.isComplete);
+          // Note: hasPayment from profile is just a flag, actual verification is done by checkPaymentMethods
+        }
+      } catch (err) {
+        console.log('Could not check profile:', err);
       }
     };
     
     checkPaymentMethods();
+    checkProfile();
   }, [mounted, userEmail]);
   
   const handleConfigClose = () => {
     setIsConfigOpen(false);
-    const config = getConfig();
-    setUserEmail(config.userEmail || '');
+    // Reload user email from profile (in case it changed)
+    setUserEmail(getUserEmail());
     loadProducts();
   };
 
-  // Handle payment method saved
-  const handlePaymentMethodSaved = (paymentMethodId: string) => {
-    setShowPaymentSetup(false);
-    setHasPaymentMethod(true);
-    
-    // Add confirmation message
-    addAssistantMessage(
-      `✅ **Payment method saved!** Your card is now securely stored.\n\n` +
-      `You can now complete your purchase. Just say "complete my order" or "pay now".`
-    );
+  // Handle opening profile settings from chat buttons
+  const handleOpenProfile = (tab: 'info' | 'address' | 'shipping' | 'payment') => {
+    setProfileInitialTab(tab);
+    setShowProfileSettings(true);
   };
 
   const addAssistantMessage = (content: string) => {
     setMessages(prev => [...prev, { role: 'assistant', content }]);
-  };
-
-  // Handle address form submission
-  const handleAddressSubmit = async (address: {
-    name: string;
-    line_one: string;
-    line_two?: string;
-    city: string;
-    state: string;
-    postal_code: string;
-    country: string;
-  }) => {
-    if (!checkoutState?.id) return;
-    
-    setIsUpdatingCheckout(true);
-    try {
-      const updated = await updateCheckout(checkoutState.id, {
-        fulfillmentAddress: address,
-      });
-      setCheckoutState(updated);
-      setShowAddressForm(false);
-      addAssistantMessage(
-        `✅ **Shipping address saved!**\n\n` +
-        `📍 ${address.name}\n${address.line_one}${address.line_two ? ', ' + address.line_two : ''}\n${address.city}, ${address.state} ${address.postal_code}\n\n` +
-        `Now please select a shipping method below.`
-      );
-    } catch (err: any) {
-      setError(err.message || 'Failed to save address');
-    } finally {
-      setIsUpdatingCheckout(false);
-    }
-  };
-
-  // Handle shipping option selection
-  const handleShippingSelect = async (optionId: string) => {
-    if (!checkoutState?.id) return;
-    
-    setIsUpdatingCheckout(true);
-    try {
-      const updated = await updateCheckout(checkoutState.id, {
-        fulfillmentOptionId: optionId,
-      });
-      setCheckoutState(updated);
-      
-      const selectedOption = checkoutState.fulfillment_options?.find(o => o.id === optionId);
-      if (selectedOption) {
-        addAssistantMessage(
-          `✅ **${selectedOption.title}** selected! (${selectedOption.subtitle})\n\n` +
-          `Your order is ready for payment. ${hasPaymentMethod ? 'Say "complete my order" to finish!' : 'Please add a payment method to complete your purchase.'}`
-        );
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to update shipping');
-    } finally {
-      setIsUpdatingCheckout(false);
-    }
   };
 
   // Handle chat submissions - AI handles all checkout logic via function calling
@@ -304,18 +275,34 @@ export default function ChatInterface() {
       
       // Update checkout state if changed
       if (response.checkoutState) {
+        // Check if this is a NEW checkout (different ID) - if so, replace completely
+        const isNewCheckout = !checkoutState || response.checkoutState.id !== checkoutState.id;
+        console.log('🛒 Checkout from API:', {
+          isNew: isNewCheckout,
+          id: response.checkoutState.id,
+          items: response.checkoutState.line_items?.map(i => `${i.title} (${i.id})`) || [],
+          status: response.checkoutState.status
+        });
         setCheckoutState(response.checkoutState);
-      }
-      
-      // Show payment setup if AI requests it
-      if (response.showPaymentSetup) {
-        setShowPaymentSetup(true);
+        
+        // Save to Sales tab if order just completed
+        if (response.checkoutState.status === 'completed') {
+          saveCompletedOrder(response.checkoutState);
+        }
       }
       
       // Update email if AI captured a new one from conversation
       if (response.updatedEmail) {
         setUserEmail(response.updatedEmail);
-        saveConfig({ userEmail: response.updatedEmail });
+        // Save to profile (in localStorage)
+        try {
+          const existingProfile = localStorage.getItem('userProfile');
+          const profile = existingProfile ? JSON.parse(existingProfile) : {};
+          profile.email = response.updatedEmail;
+          localStorage.setItem('userProfile', JSON.stringify(profile));
+        } catch (err) {
+          console.error('Could not save email to profile:', err);
+        }
       }
       
       // Update products from agent response (for rendering [PRODUCT:id] tags)
@@ -347,28 +334,37 @@ export default function ChatInterface() {
     // Don't reset hasPaymentMethod - the card is still saved on the Agent backend
   };
 
-  const clearChat = () => {
+  const clearChat = async () => {
+    // Get all customer identifiers (email and/or anonymous ID)
+    const customersToDelete = [
+      userEmail,
+      localStorage.getItem('anonymousCustomerId')
+    ].filter(Boolean) as string[];
+    
+    // Delete payment methods and profile from Agent backend
+    for (const customerId of customersToDelete) {
+      try {
+        await Promise.all([
+          deletePaymentMethods(customerId),
+          deleteProfile(customerId)
+        ]);
+      } catch (err) {
+        console.warn(`Could not delete data for ${customerId}:`, err);
+      }
+    }
+    
     setMessages([]);
     setCheckoutState(null);
     setHasPaymentMethod(false);
+    setProfileComplete(false);
+    setUserEmail('');
     setError(null);
-    setShowPaymentSetup(false);
-    setShowAddressForm(false);
     clearPersistedChat();
+    // Clear profile data from localStorage
+    localStorage.removeItem('userProfile');
+    // Clear anonymous customer ID
+    clearAnonymousCustomerId();
   };
-
-  // Status configuration - single source of truth for status display
-  const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-    'not_ready_for_payment': { label: '🟡 Needs Info', color: 'bg-yellow-500' },
-    'ready_for_payment': { label: '🟢 Ready to Pay', color: 'bg-green-500' },
-    'in_progress': { label: '⏳ Processing', color: 'bg-blue-500' },
-    'completed': { label: '✅ Complete', color: 'bg-emerald-600' },
-    'canceled': { label: '❌ Cancelled', color: 'bg-red-500' },
-  };
-
-  function getStatusInfo(status: string): { label: string; color: string } {
-    return STATUS_CONFIG[status] || { label: status, color: 'bg-gray-500' };
-  }
 
   const getPlaceholder = () => {
     if (checkoutState?.status === 'not_ready_for_payment') {
@@ -404,45 +400,55 @@ export default function ChatInterface() {
                 </span>
               )}
 
-              {userEmail && (
-                <span className="text-xs bg-white bg-opacity-20 px-2 py-1 rounded-full">
-                  👤 {userEmail}
+              {/* Profile Button */}
+              <button
+                onClick={() => setShowProfileSettings(true)}
+                className={`text-xs px-2 py-1 rounded-full transition-all flex items-center gap-1 ${
+                  profileComplete 
+                    ? 'bg-green-500 bg-opacity-80 hover:bg-opacity-100' 
+                    : 'bg-yellow-400 text-gray-900 font-bold hover:bg-yellow-300'
+                }`}
+                title={profileComplete ? 'View/edit your profile' : 'Set up your profile (address, shipping, payment)'}
+              >
+                <span>👤</span>
+                {profileComplete ? 'Profile ✓' : 'Set Up Profile'}
+              </button>
+              
+              {/* Payment Method Status */}
+              {hasPaymentMethod && !profileComplete && (
+                <span className="text-xs bg-blue-500 bg-opacity-80 px-2 py-1 rounded-full">
+                  💳 Card saved
                 </span>
               )}
 
-              {/* Add Card / Card Saved button */}
+              {/* Basket Button */}
               <button
-                onClick={() => setShowPaymentSetup(true)}
-                className={`text-xs px-2 py-1 rounded-full transition-all ${
-                  hasPaymentMethod 
-                    ? 'bg-blue-500 bg-opacity-80 hover:bg-opacity-100' 
-                    : 'bg-yellow-400 text-gray-900 font-bold hover:bg-yellow-300'
+                onClick={() => setShowBasket(true)}
+                className={`text-xs px-2 py-1 rounded-full transition-all flex items-center gap-1 ${
+                  checkoutState && checkoutState.line_items?.length
+                    ? checkoutState.status === 'completed'
+                      ? 'bg-green-500 bg-opacity-80 hover:bg-opacity-100'
+                      : 'bg-purple-500 bg-opacity-80 hover:bg-opacity-100'
+                    : 'bg-gray-400 bg-opacity-80 hover:bg-opacity-100'
                 }`}
-                title={hasPaymentMethod ? 'Add another card' : 'Add a payment method'}
               >
-                {hasPaymentMethod ? '💳 Card saved' : '💳 Add Card'}
+                <span>🛒</span>
+                {checkoutState?.line_items?.length ? (
+                  <>
+                    <span>{checkoutState.line_items.length} item{checkoutState.line_items.length !== 1 ? 's' : ''}</span>
+                    {checkoutState.status === 'completed' && <span>✓</span>}
+                  </>
+                ) : (
+                  <span>Basket</span>
+                )}
               </button>
 
-              {checkoutState && (
-                <div className={`text-xs ${getStatusInfo(checkoutState.status).color} px-2 py-1 rounded-full flex items-center gap-1`}>
-                  <span>🛒 {getStatusInfo(checkoutState.status).label}</span>
-                  {(checkoutState.status === 'completed' || checkoutState.status === 'canceled') && (
-                    <button
-                      onClick={clearCheckout}
-                      className="ml-1 bg-white bg-opacity-30 px-1.5 rounded hover:bg-opacity-50"
-                    >
-                      New
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Clear Chat button - shown when there are messages */}
-              {messages.length > 0 && (
+              {/* Clear Session button - shown when there are messages or profile data */}
+              {(messages.length > 0 || userEmail) && (
                 <button
                   onClick={clearChat}
                   className="text-xs bg-red-500 bg-opacity-80 px-2 py-1 rounded-full hover:bg-opacity-100 transition-all"
-                  title="Clear all messages and reset checkout"
+                  title="Clear all messages, checkout, and profile data"
                 >
                   🗑️ Clear Session
                 </button>
@@ -489,7 +495,19 @@ export default function ChatInterface() {
                 }`}
               >
                 {msg.role === 'assistant' ? (
-                  <MessageRenderer content={msg.content} products={products} />
+                  <MessageRenderer 
+                    content={msg.content} 
+                    products={products} 
+                    onOpenProfile={handleOpenProfile}
+                    onProductClick={(product) => {
+                      // User clicked a product - signal intent to buy
+                      setInput(`I want to buy the ${product.title}`);
+                      setTimeout(() => {
+                        const form = document.querySelector('form');
+                        if (form) form.requestSubmit();
+                      }, 100);
+                    }}
+                  />
                 ) : (
                   <p className="whitespace-pre-wrap">{msg.content}</p>
                 )}
@@ -497,76 +515,7 @@ export default function ChatInterface() {
             </div>
           ))}
 
-          {/* Cart Summary - shown when checkout exists and not completed */}
-          {checkoutState && checkoutState.status !== 'completed' && checkoutState.line_items && checkoutState.line_items.length > 0 && (
-            <div className="my-4">
-              <CartSummary checkout={checkoutState} />
-            </div>
-          )}
-
-          {/* Address Form - shown when checkout exists but no address */}
-          {checkoutState && !checkoutState.fulfillment_address && !showAddressForm && checkoutState.status !== 'completed' && (
-            <div className="my-4">
-              <div className="bg-white rounded-xl p-4 shadow-md">
-                <p className="text-sm text-gray-700 mb-3">
-                  📍 We need your shipping address to continue.
-                </p>
-                <button
-                  onClick={() => setShowAddressForm(true)}
-                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-bold py-2.5 px-4 rounded-lg hover:shadow-lg transition-all text-sm"
-                >
-                  Enter Shipping Address
-                </button>
-              </div>
-            </div>
-          )}
-
-          {showAddressForm && (
-            <div className="my-4">
-              <AddressForm
-                onSubmit={handleAddressSubmit}
-                onCancel={() => setShowAddressForm(false)}
-                isLoading={isUpdatingCheckout}
-              />
-            </div>
-          )}
-
-          {/* Shipping Options - shown when address exists but no shipping selected */}
-          {checkoutState?.fulfillment_address && 
-           checkoutState.fulfillment_options && 
-           checkoutState.fulfillment_options.length > 0 &&
-           !checkoutState.fulfillment_option_id &&
-           checkoutState.status !== 'completed' && (
-            <div className="my-4">
-              <ShippingOptions
-                options={checkoutState.fulfillment_options}
-                selectedId={checkoutState.fulfillment_option_id}
-                onSelect={handleShippingSelect}
-                isLoading={isUpdatingCheckout}
-              />
-            </div>
-          )}
-
-          {/* Payment Setup Modal */}
-          {showPaymentSetup && (
-            <div className="my-4">
-              <PaymentSetup 
-                onSuccess={handlePaymentMethodSaved}
-                onCancel={() => setShowPaymentSetup(false)}
-                email={userEmail}
-              />
-            </div>
-          )}
-
-          {/* Order Confirmation */}
-          {checkoutState?.status === 'completed' && checkoutState.order && (
-            <div className="my-4">
-              <OrderConfirmation 
-                checkout={checkoutState}
-                onNewOrder={clearCheckout}
-              />
-            </div>
-          )}
+          {/* Cart/Order info is now in the Basket drawer - click the 🛒 button to see it */}
 
           {/* Loading */}
           {isLoading && (
@@ -589,16 +538,22 @@ export default function ChatInterface() {
         </div>
 
         {/* Quick Actions */}
-        {checkoutState?.status === 'ready_for_payment' && !showPaymentSetup && (
+        {checkoutState?.status === 'ready_for_payment' && (
           <div className="px-4 py-2 bg-green-50 border-t border-green-200">
             <div className="flex items-center justify-between">
               <span className="text-sm text-green-800">
                 💰 Total: <strong>${((checkoutState.totals?.find(t => t.type === 'total')?.amount || 0) / 100).toFixed(2)}</strong>
               </span>
               <div className="flex gap-2">
+                <button
+                  onClick={() => setShowBasket(true)}
+                  className="text-sm bg-gray-600 text-white px-3 py-1 rounded-lg hover:bg-gray-700"
+                >
+                  🛒 View Cart
+                </button>
                 {!hasPaymentMethod && (
                   <button
-                    onClick={() => setShowPaymentSetup(true)}
+                    onClick={() => handleOpenProfile('payment')}
                     className="text-sm bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700"
                   >
                     💳 Add Card
@@ -634,11 +589,11 @@ export default function ChatInterface() {
               placeholder={getPlaceholder()}
               className="flex-1 p-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-purple-600 resize-none text-gray-900 text-sm"
               rows={2}
-              disabled={isLoading || showPaymentSetup}
+              disabled={isLoading}
             />
             <button
               type="submit"
-              disabled={isLoading || !input.trim() || showPaymentSetup}
+              disabled={isLoading || !input.trim()}
               className="px-5 bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
             >
               {isLoading ? '⏳' : '➤'}
@@ -658,6 +613,94 @@ export default function ChatInterface() {
       </div>
 
       {isConfigOpen && <ConfigModal onClose={handleConfigClose} />}
+      
+      {/* Profile Settings Modal - key forces re-mount when userEmail changes (e.g., after clear session) */}
+      <ProfileSettings
+        key={userEmail || 'no-user'}
+        isOpen={showProfileSettings}
+        initialTab={profileInitialTab}
+        onClose={() => {
+          setShowProfileSettings(false);
+          // Refresh email from profile after closing
+          const newEmail = getUserEmail();
+          setUserEmail(newEmail);
+          
+          // Smart resume: Check profile completeness and suggest next steps
+          try {
+            const profileStr = localStorage.getItem('userProfile');
+            if (profileStr) {
+              const profile = JSON.parse(profileStr);
+              const hasEmail = !!profile.email;
+              const hasAddress = !!(profile.address?.line_one && profile.address?.city);
+              const hasShipping = !!profile.shippingPreference;
+              const hasPayment = !!profile.paymentMethodId;
+              
+              // Update state
+              if (hasPayment) setHasPaymentMethod(true);
+              const isComplete = hasEmail && hasAddress && hasShipping && hasPayment;
+              setProfileComplete(isComplete);
+              
+              // Add smart resume message based on what was just added
+              if (isComplete) {
+                addAssistantMessage(
+                  `✅ **Profile complete!** You're all set.\n\n` +
+                  `Your shipping address, delivery preference, and payment method are saved. ` +
+                  `Say **"continue"** or **"proceed with my order"** and I'll complete your purchase!`
+                );
+              } else if (!hasEmail) {
+                addAssistantMessage(
+                  `👤 Please add your email to continue.\n\n[PROFILE:info]`
+                );
+              } else if (!hasAddress) {
+                addAssistantMessage(
+                  `📍 Great! Now let's add your shipping address.\n\n[PROFILE:address]`
+                );
+              } else if (!hasShipping) {
+                addAssistantMessage(
+                  `🚚 Address saved! Now choose your shipping preference.\n\n[PROFILE:shipping]`
+                );
+              } else if (!hasPayment) {
+                addAssistantMessage(
+                  `💳 Almost there! Add a payment method to complete your profile.\n\n[PROFILE:payment]`
+                );
+              }
+            }
+          } catch (err) {
+            console.error('Error checking profile after close:', err);
+          }
+        }}
+        onProfileUpdate={(profile) => {
+          // Update email state when profile changes
+          if (profile.email) {
+            setUserEmail(profile.email);
+          }
+          if (profile.paymentMethodId) {
+            setHasPaymentMethod(true);
+          }
+          const isComplete = !!(
+            profile.address?.line_one &&
+            profile.shippingPreference &&
+            profile.paymentMethodId
+          );
+          setProfileComplete(isComplete);
+        }}
+      />
+      
+      {/* Basket Drawer */}
+      <BasketDrawer
+        checkout={checkoutState}
+        isOpen={showBasket}
+        onClose={() => setShowBasket(false)}
+        onNewOrder={clearCheckout}
+        hasPaymentMethod={hasPaymentMethod}
+        onPayNow={() => {
+          setInput('Complete my order');
+          setTimeout(() => {
+            const form = document.querySelector('form');
+            if (form) form.requestSubmit();
+          }, 100);
+        }}
+      />
     </div>
   );
 }

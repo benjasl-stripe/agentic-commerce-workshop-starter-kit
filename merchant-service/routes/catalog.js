@@ -2,12 +2,75 @@ import express from 'express';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { checkouts } from './checkouts.js';
 
 const router = express.Router();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Store original prices for reset functionality (per catalog)
 const originalPrices = {};
+
+// Sales history tracking (per catalog)
+const salesHistory = {};
+
+/**
+ * Record a sale in the sales history
+ */
+function recordSale(catalogName, product, quantity, orderId = null) {
+  if (!salesHistory[catalogName]) {
+    salesHistory[catalogName] = [];
+  }
+  
+  salesHistory[catalogName].push({
+    id: `sale_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    productId: product.id,
+    productTitle: product.title || product.id,
+    quantity,
+    pricePerUnit: product.price,
+    totalAmount: product.price * quantity,
+    orderId,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/**
+ * Get sales history for a catalog
+ */
+function getSalesHistory(catalogName) {
+  return (salesHistory[catalogName] || []).slice().reverse(); // Most recent first
+}
+
+/**
+ * Get sales summary for a catalog
+ */
+function getSalesSummary(catalogName) {
+  const history = salesHistory[catalogName] || [];
+  const summary = {};
+  
+  for (const sale of history) {
+    if (!summary[sale.productId]) {
+      summary[sale.productId] = {
+        productId: sale.productId,
+        productTitle: sale.productTitle,
+        totalQuantitySold: 0,
+        totalRevenue: 0,
+        salesCount: 0,
+      };
+    }
+    summary[sale.productId].totalQuantitySold += sale.quantity;
+    summary[sale.productId].totalRevenue += sale.totalAmount;
+    summary[sale.productId].salesCount += 1;
+  }
+  
+  return Object.values(summary).sort((a, b) => b.totalRevenue - a.totalRevenue);
+}
+
+/**
+ * Clear sales history for a catalog
+ */
+function clearSalesHistory(catalogName) {
+  salesHistory[catalogName] = [];
+}
 
 /**
  * Helper: Load products from a JSON catalog file
@@ -205,6 +268,138 @@ router.post('/:catalog/stock', (req, res) => {
       inStock: product.inStock
     }
   });
+});
+
+/**
+ * POST /api/:catalog/sale
+ * Record a sale - decrements stock AND records in sales history
+ * Used by webhooks to confirm purchases
+ * Body: { productId: string, quantity: number, orderId?: string }
+ */
+router.post('/:catalog/sale', (req, res) => {
+  const catalogName = req.params.catalog;
+  const { productId, quantity = 1, orderId } = req.body;
+  
+  if (!productId) {
+    return res.status(400).json({ success: false, error: 'productId is required' });
+  }
+  
+  const { products, error, jsonPath, isArray, originalData } = loadCatalog(catalogName);
+  if (error) {
+    return res.status(404).json({ success: false, error });
+  }
+  
+  const product = products.find(p => p.id === productId);
+  if (!product) {
+    return res.status(404).json({ success: false, error: `Product not found: ${productId}` });
+  }
+  
+  const oldStock = product.stock ?? 10;
+  
+  // Check if enough stock
+  if (oldStock < quantity) {
+    return res.status(400).json({
+      success: false,
+      error: 'Insufficient stock',
+      product: { id: product.id, availableStock: oldStock }
+    });
+  }
+  
+  // Decrement stock
+  product.stock = oldStock - quantity;
+  product.inStock = product.stock > 0;
+  
+  // Save to JSON file
+  const saveResult = saveCatalog(jsonPath, products, isArray, originalData);
+  if (!saveResult.success) {
+    return res.status(500).json({ success: false, error: saveResult.error });
+  }
+  
+  // Record the sale in history
+  recordSale(catalogName, product, quantity, orderId);
+  
+  const status = product.stock === 0 ? '🔴 OUT OF STOCK' : `🟢 ${product.stock} in stock`;
+  console.log(`💰 SALE [${catalogName}]: ${quantity}x ${product.title || product.id} (${status})`);
+  
+  res.json({
+    success: true,
+    message: `Sale recorded: ${quantity}x ${product.title || product.id}`,
+    product: {
+      id: product.id,
+      title: product.title || product.id,
+      oldStock,
+      newStock: product.stock,
+      inStock: product.inStock
+    },
+    orderId
+  });
+});
+
+/**
+ * GET /api/:catalog/sales
+ * Get sales history for a catalog
+ * Also returns completed checkouts from the checkout system
+ */
+router.get('/:catalog/sales', (req, res) => {
+  const catalogName = req.params.catalog;
+  
+  const history = getSalesHistory(catalogName);
+  const summary = getSalesSummary(catalogName);
+  
+  const totalRevenue = history.reduce((sum, sale) => sum + sale.totalAmount, 0);
+  const totalItemsSold = history.reduce((sum, sale) => sum + sale.quantity, 0);
+  
+  // Get completed checkouts from the checkout system
+  const completedCheckouts = [];
+  let webhookConfirmed = 0;
+  let webhookPending = 0;
+  
+  for (const [id, checkout] of checkouts) {
+    if (checkout.status === 'completed') {
+      completedCheckouts.push({
+        id,
+        completedAt: checkout.completed_at,
+        webhookConfirmed: checkout.webhook_confirmed || false,
+        webhookConfirmedAt: checkout.webhook_confirmed_at || null,
+        paymentIntentId: checkout.payment_intent_id,
+        orderId: checkout.order?.id,
+        total: checkout.totals?.find(t => t.type === 'total')?.amount,
+        items: checkout.line_items?.length || 0,
+      });
+      
+      if (checkout.webhook_confirmed) {
+        webhookConfirmed++;
+      } else {
+        webhookPending++;
+      }
+    }
+  }
+  
+  // Sort by most recent first
+  completedCheckouts.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+  
+  res.json({
+    totalRevenue,
+    totalItemsSold,
+    totalOrders: completedCheckouts.length || history.length,
+    history,
+    summary,
+    completedCheckouts,
+    webhookStats: {
+      confirmed: webhookConfirmed,
+      pending: webhookPending,
+    }
+  });
+});
+
+/**
+ * POST /api/:catalog/sales/reset
+ * Clear sales history for a catalog
+ */
+router.post('/:catalog/sales/reset', (req, res) => {
+  const catalogName = req.params.catalog;
+  clearSalesHistory(catalogName);
+  res.json({ success: true, message: 'Sales history cleared' });
 });
 
 /**

@@ -7,11 +7,21 @@ import { Product } from '@/lib/products';
 interface MessageRendererProps {
   content: string;
   products: Product[];
+  onOpenProfile?: (tab: 'info' | 'address' | 'shipping' | 'payment') => void;
+  onProductClick?: (product: Product) => void;
 }
 
-export default function MessageRenderer({ content, products }: MessageRendererProps) {
-  // Parse content for product references and group consecutive ones
-  const parts = content.split(/(\[PRODUCT:[^\]]+\])/g);
+// Profile button labels and icons
+const PROFILE_BUTTONS: Record<string, { label: string; icon: string }> = {
+  info: { label: 'Set Up Your Profile', icon: '👤' },
+  address: { label: 'Add Shipping Address', icon: '📍' },
+  shipping: { label: 'Choose Shipping Method', icon: '🚚' },
+  payment: { label: 'Add Payment Method', icon: '💳' },
+};
+
+export default function MessageRenderer({ content, products, onOpenProfile, onProductClick }: MessageRendererProps) {
+  // Parse content for product and profile references
+  const parts = content.split(/(\[PRODUCT:[^\]]+\]|\[PROFILE:[^\]]+\])/g);
   
   // Group consecutive product tags together
   const groupedElements: JSX.Element[] = [];
@@ -23,7 +33,7 @@ export default function MessageRenderer({ content, products }: MessageRendererPr
       groupedElements.push(
         <div key={`products-${groupedElements.length}`} className="my-3 space-y-2">
           {currentProductGroup.map((product, idx) => (
-            <ProductCard key={idx} product={product} />
+            <ProductCard key={idx} product={product} onClick={onProductClick} />
           ))}
         </div>
       );
@@ -49,6 +59,7 @@ export default function MessageRenderer({ content, products }: MessageRendererPr
   
   parts.forEach((part) => {
     const productMatch = part.match(/\[PRODUCT:([^\]]+)\]/);
+    const profileMatch = part.match(/\[PROFILE:([^\]]+)\]/);
     
     if (productMatch) {
       // Flush any pending text before starting product group
@@ -80,6 +91,25 @@ export default function MessageRenderer({ content, products }: MessageRendererPr
       } else {
         console.warn('Product not found:', identifier);
       }
+    } else if (profileMatch) {
+      // Profile button - flush any pending content first
+      flushProductGroup();
+      flushTextBuffer();
+      
+      const tab = profileMatch[1].trim().toLowerCase() as 'info' | 'address' | 'shipping' | 'payment';
+      const buttonConfig = PROFILE_BUTTONS[tab] || PROFILE_BUTTONS.info;
+      
+      groupedElements.push(
+        <div key={`profile-${groupedElements.length}`} className="my-3">
+          <button
+            onClick={() => onOpenProfile?.(tab)}
+            className="w-full bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-bold py-3 px-6 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
+          >
+            <span className="text-xl">{buttonConfig.icon}</span>
+            <span>{buttonConfig.label}</span>
+          </button>
+        </div>
+      );
     } else if (part.trim()) {
       // Text content - flush products first if any
       flushProductGroup();

@@ -193,6 +193,34 @@ router.get('/has-method', async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/payment/methods
+ * Remove all payment methods for a customer (used by Clear Session)
+ */
+router.delete('/methods', async (req, res) => {
+  try {
+    const { email } = req.query;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email required' });
+    }
+    
+    console.log('🗑️ Deleting payment methods for:', email);
+    
+    const data = await callProxy(`/methods?email=${encodeURIComponent(email)}`, {
+      method: 'DELETE',
+    });
+    
+    console.log('✅ Payment methods deleted for:', email);
+    res.json(data);
+    
+  } catch (error) {
+    console.error('Delete payment methods error:', error.message);
+    // Don't fail the request if proxy doesn't support delete - just log
+    res.json({ success: true, message: 'Cleared locally' });
+  }
+});
+
 // ============================================================================
 // Exported Functions for use by other modules (chat.js)
 // ============================================================================
@@ -205,13 +233,11 @@ router.get('/has-method', async (req, res) => {
  * - Return the array of payment methods
  */
 export async function getCustomerPaymentMethods(email) {
-  // TODO: Implement this function
-  // 
-  // const data = await callProxy(`/methods?email=${encodeURIComponent(email)}`);
-  // return data.paymentMethods || [];
-  
-  throw new Error('TODO: Implement getCustomerPaymentMethods');
+  // Get from proxy
+  const data = await callProxy(`/methods?email=${encodeURIComponent(email)}`);
+  return data.paymentMethods || [];
 }
+
 
 /**
  * Create a Shared Payment Token
@@ -222,20 +248,19 @@ export async function getCustomerPaymentMethods(email) {
  * - Return the token for use in checkout completion
  */
 export async function createSPT(email, amount = 100000, currency = 'usd') {
-  // TODO: Implement this function
-  // 
-  // 1. Get the user's payment method from the proxy
-  // const methods = await callProxy(`/methods?email=${encodeURIComponent(email)}`);
-  // 
-  // 2. Call the proxy to create an SPT
-  // const data = await callProxy('/create-spt', {
-  //   method: 'POST',
-  //   body: JSON.stringify({ email, amount, currency }),
-  // });
-  // 
-  // return data;
+  // Call the proxy to create an SPT
+  const data = await callProxy('/create-spt', {
+    method: 'POST',
+    body: JSON.stringify({ email, amount, currency }),
+  });
   
-  throw new Error('TODO: Implement createSPT - create a Shared Payment Token for the user');
+  if (data.error) {
+    throw new Error(data.error);
+  }
+  
+  console.log('🔐 SPT created for', email);
+  return data;
 }
+
 
 export default router;

@@ -12,9 +12,6 @@ export interface Config {
   // Stripe (publishable key is safe for frontend)
   stripePublishableKey: string;
   
-  // User info for checkout
-  userEmail: string;
-  
   // AI Persona - custom system prompt for the AI assistant
   aiPersona: string;
   
@@ -37,7 +34,6 @@ export function getConfig(): Config {
       workshopSecret: '',
       productsApiUrl: '',
       stripePublishableKey: '',
-      userEmail: '',
       aiPersona: '',
       testMode: false,
     };
@@ -49,10 +45,49 @@ export function getConfig(): Config {
     workshopSecret: localStorage.getItem('workshopSecret') || '',
     productsApiUrl: localStorage.getItem('productsApiUrl') || '',
     stripePublishableKey: localStorage.getItem('stripePublishableKey') || '',
-    userEmail: localStorage.getItem('userEmail') || '',
     aiPersona: localStorage.getItem('aiPersona') || '',
     testMode: localStorage.getItem('testMode') === 'true',
   };
+}
+
+// Helper to get user email from profile (stored separately from config)
+export function getUserEmail(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const profile = localStorage.getItem('userProfile');
+    if (profile) {
+      const parsed = JSON.parse(profile);
+      return parsed.email || '';
+    }
+  } catch (err) {
+    console.error('Error reading user profile:', err);
+  }
+  return '';
+}
+
+// Get or create a customer identifier for payment methods
+// Uses real email if available, otherwise generates an anonymous ID
+export function getOrCreateCustomerId(): string {
+  if (typeof window === 'undefined') return '';
+  
+  // First, check if user has a real email
+  const email = getUserEmail();
+  if (email) return email;
+  
+  // Check for existing anonymous ID
+  let anonId = localStorage.getItem('anonymousCustomerId');
+  if (anonId) return anonId;
+  
+  // Generate a new anonymous ID (looks like email for Stripe proxy compatibility)
+  anonId = `anon_${crypto.randomUUID().slice(0, 12)}@guest.local`;
+  localStorage.setItem('anonymousCustomerId', anonId);
+  return anonId;
+}
+
+// Clear anonymous customer ID (called when session is cleared)
+export function clearAnonymousCustomerId(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('anonymousCustomerId');
 }
 
 export function saveConfig(config: Partial<Config>): void {
@@ -72,9 +107,6 @@ export function saveConfig(config: Partial<Config>): void {
   }
   if (config.stripePublishableKey !== undefined) {
     localStorage.setItem('stripePublishableKey', config.stripePublishableKey);
-  }
-  if (config.userEmail !== undefined) {
-    localStorage.setItem('userEmail', config.userEmail);
   }
   if (config.aiPersona !== undefined) {
     localStorage.setItem('aiPersona', config.aiPersona);

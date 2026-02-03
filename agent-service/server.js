@@ -14,6 +14,7 @@ import dotenv from 'dotenv';
 import chatRouter from './routes/chat.js';
 import checkoutRouter from './routes/checkout.js';
 import paymentRouter from './routes/payment.js';
+import profileRouter from './routes/profile.js';
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ app.use((req, res, next) => {
 app.use('/api/chat', chatRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/payment', paymentRouter);
+app.use('/api/profile', profileRouter);
 
 // Root endpoint
 app.get('/', (req, res) => {

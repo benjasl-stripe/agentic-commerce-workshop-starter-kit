@@ -33,10 +33,17 @@ const SYSTEM_PROMPT_PREFIX = `CRITICAL RULES - YOU MUST FOLLOW THESE:
 4. NEVER list, recommend, or mention specific products unless they appear in the Available Products list.
 5. NEVER make up product names, categories, or prices.
 
+CRITICAL - PRODUCT ID ACCURACY:
+6. When calling create_checkout, you MUST use the EXACT product_id from the Available Products list.
+7. DOUBLE-CHECK: The product_id you use MUST match the product name you're discussing.
+   - If talking about "Salomon QST 98", find its ID in the list (e.g., SKI-005) and use THAT ID.
+   - Do NOT guess or use a different ID.
+8. VERIFY before calling: Look at the product list, find the exact product by name, get its ID, then use that ID.
+
 `;
 
 export function buildSystemPrompt(options = {}) {
-  const { aiPersona, checkoutState, products } = options;
+  const { aiPersona, checkoutState, products, userProfile } = options;
   
   // Always start with the hardcoded prefix
   let systemPrompt = SYSTEM_PROMPT_PREFIX;
@@ -66,16 +73,70 @@ Let me know which one interests you!"
 RULES:
 - DO NOT write the product name before or after the tag - the card shows it automatically
 - Put each [PRODUCT:id] on its own line
-- Keep your text brief - the cards have all the details`;
+- Keep your text brief - the cards have all the details
+
+## CRITICAL: Profile Buttons (NEVER ASK FOR INFO IN CHAT)
+When you need the user's address, shipping preference, or payment method:
+- NEVER ask them to type or describe this information in chat
+- NEVER ask "What is your address?" or "Please provide your shipping address"
+- ONLY use a profile button - the user will fill out a proper form
+
+Available buttons:
+- [PROFILE:info] - Opens profile info (email, name)
+- [PROFILE:address] - Opens shipping address form  
+- [PROFILE:shipping] - Opens shipping preference selection
+- [PROFILE:payment] - Opens payment method setup
+
+CORRECT example:
+"To complete your order, I need your shipping address.
+
+[PROFILE:address]"
+
+WRONG examples (NEVER do these):
+- "What is your shipping address?"
+- "Please provide your address so I can ship your order"
+- "I need your street, city, and zip code"
+
+RULES:
+- Put the [PROFILE:tab] button on its own line
+- Only use ONE profile button per response
+- Keep text before the button very brief (1 sentence max)
+- Do NOT add text after the button - let the user click it`;
+
+
+  // Add user profile context if available
+  if (userProfile) {
+    const hasAddress = !!(userProfile.address?.line_one && userProfile.address?.city);
+    const hasShipping = !!userProfile.shippingPreference;
+    const hasPayment = !!userProfile.paymentMethodId;
+    
+    systemPrompt += `\n\n## User Profile Status
+- Name: ${userProfile.name || 'Not set'}
+- Email: ${userProfile.email || 'Not set'}
+- Shipping Address: ${hasAddress ? '✅ SAVED (do not ask)' : '❌ MISSING'}
+- Shipping Preference: ${hasShipping ? '✅ SAVED: ' + userProfile.shippingPreference + ' (do not ask)' : '❌ MISSING'}
+- Payment Method: ${hasPayment ? '✅ SAVED (do not ask)' : '❌ MISSING'}
+
+${hasAddress && hasShipping && hasPayment ? 
+'🎯 ALL INFO SAVED - Do NOT ask for any profile information. Just confirm the order and complete it!' : 
+`NEXT STEP: Show ONLY the button for the first missing item:
+${!hasAddress ? '→ [PROFILE:address]' : !hasShipping ? '→ [PROFILE:shipping]' : !hasPayment ? '→ [PROFILE:payment]' : ''}`}
+`;
+  }
 
   // Add checkout context if available
   if (checkoutState) {
+    const itemsList = checkoutState.line_items?.map(i => `${i.title} (${i.id})`).join(', ') || 'none';
     systemPrompt += `\n\n## Current Checkout Session
 - Checkout ID: ${checkoutState.id}
 - Status: ${checkoutState.status}
+- Items in cart: ${itemsList}
 ${checkoutState.status === 'not_ready_for_payment' ? '- ⚠️ Needs shipping address to proceed' : ''}
 ${checkoutState.status === 'ready_for_payment' ? '- ✅ Ready for payment - ask customer to confirm' : ''}
 ${checkoutState.status === 'completed' ? '- 🎉 Order complete!' : ''}
+
+IMPORTANT: If the user asks to buy DIFFERENT items than what's in the cart, you MUST call create_checkout with the NEW items.
+Do NOT use the existing checkout for different products. Create a fresh checkout.
 `;
   }
 
@@ -101,6 +162,9 @@ ${checkoutState.status === 'completed' ? '- 🎉 Order complete!' : ''}
       if (description) systemPrompt += `- **Description**: ${description}\n`;
       systemPrompt += `\n`;
     });
+    
+    // Add reminder about product IDs
+    systemPrompt += `\n---\n⚠️ REMINDER: When calling create_checkout, use the EXACT product_id shown above (e.g., SKI-005 for Salomon QST 98).\n`;
   } else {
     systemPrompt += `\n\n## Available Products\n**NONE** - The product catalog is empty. You MUST tell the user "No products have been added yet" and nothing else about products.\n`;
   }
@@ -113,7 +177,7 @@ ${checkoutState.status === 'completed' ? '- 🎉 Order complete!' : ''}
 // ============================================================================
 
 export async function createChatCompletion(messages, options = {}) {
-  const { checkoutState, products, aiPersona, toolResults, lambdaEndpoint } = options;
+  const { checkoutState, products, aiPersona, userProfile, toolResults, lambdaEndpoint } = options;
   
   // Use provided endpoint, fall back to env var
   const endpoint = lambdaEndpoint || getLambdaEndpoint();
@@ -123,7 +187,7 @@ export async function createChatCompletion(messages, options = {}) {
   }
   
   const workshopSecret = getWorkshopSecret();
-  const workshopContext = buildSystemPrompt({ aiPersona, checkoutState, products });
+  const workshopContext = buildSystemPrompt({ aiPersona, checkoutState, products, userProfile });
   
   console.log(`   Calling Lambda AI service: ${endpoint}`);
   console.log(`   🔑 Workshop secret: ${workshopSecret ? 'Set (' + workshopSecret.substring(0, 10) + '...)' : 'NOT SET'}`);
