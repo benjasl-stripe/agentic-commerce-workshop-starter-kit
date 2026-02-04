@@ -262,8 +262,20 @@ export async function completeCheckout(checkoutId, paymentToken, merchantUrl) {
   }, { endpoint: 'POST /checkouts/:id/complete', flow: 'Agent → Merchant' });
   
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to complete checkout');
+    const errorData = await response.json();
+    
+    // Check for error messages in the checkout response (payment declined, fraud, etc.)
+    if (errorData.messages && Array.isArray(errorData.messages)) {
+      const errorMessage = errorData.messages.find(m => m.type === 'error');
+      if (errorMessage) {
+        // Include the specific error code and content for better AI response
+        const reason = errorMessage.content || errorMessage.code || 'Payment failed';
+        throw new Error(`Payment declined: ${reason}`);
+      }
+    }
+    
+    // Fallback to standard error format
+    throw new Error(errorData.message || 'Failed to complete checkout');
   }
   
   return await response.json();

@@ -207,10 +207,21 @@ async function executeFunction(name, args, context) {
           };
         } catch (err) {
           console.log(`   ❌ Payment error: ${err.message}`);
+          
+          // Determine if this is a card issue vs other error
+          const isCardDeclined = err.message.toLowerCase().includes('declined') || 
+                                 err.message.toLowerCase().includes('fraud') ||
+                                 err.message.toLowerCase().includes('card');
+          
           return {
             success: false,
             error: err.message,
-            action_required: 'request_payment_method'
+            error_type: isCardDeclined ? 'card_declined' : 'payment_error',
+            // Tell AI to explain the error and suggest trying a different card
+            action_required: isCardDeclined ? 'explain_card_error' : 'request_payment_method',
+            user_message: isCardDeclined 
+              ? `The payment was declined: ${err.message}. Please try a different card.`
+              : `Payment could not be processed: ${err.message}`
           };
         }
       }

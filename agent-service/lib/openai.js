@@ -137,6 +137,18 @@ ${checkoutState.status === 'completed' ? '- 🎉 Order complete!' : ''}
 
 IMPORTANT: If the user asks to buy DIFFERENT items than what's in the cart, you MUST call create_checkout with the NEW items.
 Do NOT use the existing checkout for different products. Create a fresh checkout.
+
+## Handling Payment Errors
+If complete_checkout fails with an error, you MUST:
+1. Tell the user EXACTLY what went wrong (e.g., "Your card was declined due to suspected fraud")
+2. Suggest they try a different card: [PROFILE:payment]
+3. Do NOT just say "add a payment method" - explain the SPECIFIC reason
+
+Example for declined card:
+"Your payment was declined: Card flagged for suspected fraud.
+
+Please try a different card:
+[PROFILE:payment]"
 `;
   }
 
