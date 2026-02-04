@@ -87,18 +87,14 @@ function SetupForm({ onSuccess, onCancel, email }: PaymentSetupProps) {
         // TODO: Save the payment method to the Agent backend
         // Uncomment the code below:
         
-        // const userEmail = email || getUserEmail();
+        // // Get customer ID - uses email if set, otherwise generates anonymous ID
+        // const customerId = email || getOrCreateCustomerId();
         // const paymentMethodId = typeof setupIntent.payment_method === 'string' 
         //   ? setupIntent.payment_method 
         //   : setupIntent.payment_method.id;
         // 
-        // if (!userEmail) {
-        //   setError('Please set your email in Profile Settings first');
-        //   return;
-        // }
-        // 
-        // await savePaymentMethod(userEmail, paymentMethodId);
-        // onSuccess(paymentMethodId);
+        // await savePaymentMethod(customerId, paymentMethodId);
+        // onSuccess(paymentMethodId);  // ← Important! Closes the modal
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred');

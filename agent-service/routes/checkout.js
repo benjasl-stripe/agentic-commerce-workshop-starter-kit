@@ -172,25 +172,16 @@ router.post('/:id/cancel', async (req, res) => {
  * 
  * TODO: Call POST /checkouts on the Merchant service
  * - Send items array and optional buyer info
+ * - Include catalog name if provided
  * - Return the checkout object from the Merchant
  */
 export async function createCheckout(items, buyer, merchantUrl, catalog = null) {
-  const body = { items };
-  if (buyer) body.buyer = buyer;
-  if (catalog) body.catalog = catalog; // Tell merchant which catalog to use
+  // TODO: Implement this function
+  // Build the request body with items, buyer (optional), and catalog (optional)
+  // Call: POST ${merchantUrl}/checkouts
+  // Return the checkout object from the response
   
-  const response = await loggedACPFetch(`${merchantUrl}/checkouts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }, { endpoint: 'POST /checkouts', flow: 'Agent → Merchant' });
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to create checkout');
-  }
-  
-  return await response.json();
+  throw new Error('TODO: Implement createCheckout - see workshop instructions');
 }
 
 
@@ -200,16 +191,11 @@ export async function createCheckout(items, buyer, merchantUrl, catalog = null) 
  * TODO: Call GET /checkouts/:id on the Merchant service
  */
 export async function getCheckout(checkoutId, merchantUrl) {
-  const response = await loggedACPFetch(`${merchantUrl}/checkouts/${checkoutId}`, {
-    method: 'GET',
-  }, { endpoint: 'GET /checkouts/:id', flow: 'Agent → Merchant' });
+  // TODO: Implement this function
+  // Call: GET ${merchantUrl}/checkouts/${checkoutId}
+  // Return the checkout object from the response
   
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to get checkout');
-  }
-  
-  return await response.json();
+  throw new Error('TODO: Implement getCheckout - see workshop instructions');
 }
 
 
@@ -217,27 +203,17 @@ export async function getCheckout(checkoutId, merchantUrl) {
  * Update checkout with shipping address or fulfillment option
  * 
  * TODO: Call PUT /checkouts/:id on the Merchant service
+ * - Convert camelCase to snake_case for ACP protocol:
+ *   fulfillmentAddress → fulfillment_address
+ *   fulfillmentOptionId → fulfillment_option_id
  */
 export async function updateCheckout(checkoutId, updates, merchantUrl) {
-  // Convert camelCase to snake_case for ACP protocol
-  const body = {};
-  if (updates.items) body.items = updates.items;
-  if (updates.buyer) body.buyer = updates.buyer;
-  if (updates.fulfillmentAddress) body.fulfillment_address = updates.fulfillmentAddress;
-  if (updates.fulfillmentOptionId) body.fulfillment_option_id = updates.fulfillmentOptionId;
+  // TODO: Implement this function
+  // Build body with snake_case keys: fulfillment_address, fulfillment_option_id
+  // Call: PUT ${merchantUrl}/checkouts/${checkoutId}
+  // Return the updated checkout object
   
-  const response = await loggedACPFetch(`${merchantUrl}/checkouts/${checkoutId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }, { endpoint: 'PUT /checkouts/:id', flow: 'Agent → Merchant' });
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to update checkout');
-  }
-  
-  return await response.json();
+  throw new Error('TODO: Implement updateCheckout - see workshop instructions');
 }
 
 
@@ -246,39 +222,16 @@ export async function updateCheckout(checkoutId, updates, merchantUrl) {
  * 
  * TODO: Call POST /checkouts/:id/complete on the Merchant service
  * - Send payment_data with the SPT token
+ * - Handle payment errors (declined, fraud) from checkout.messages
  */
 export async function completeCheckout(checkoutId, paymentToken, merchantUrl) {
-  const body = {
-    payment_data: {
-      token: paymentToken,
-      provider: 'stripe'
-    }
-  };
+  // TODO: Implement this function
+  // Build body: { payment_data: { token: paymentToken, provider: 'stripe' } }
+  // Call: POST ${merchantUrl}/checkouts/${checkoutId}/complete
+  // Check response for errors in checkout.messages array
+  // Return the completed checkout object
   
-  const response = await loggedACPFetch(`${merchantUrl}/checkouts/${checkoutId}/complete`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }, { endpoint: 'POST /checkouts/:id/complete', flow: 'Agent → Merchant' });
-  
-  if (!response.ok) {
-    const errorData = await response.json();
-    
-    // Check for error messages in the checkout response (payment declined, fraud, etc.)
-    if (errorData.messages && Array.isArray(errorData.messages)) {
-      const errorMessage = errorData.messages.find(m => m.type === 'error');
-      if (errorMessage) {
-        // Include the specific error code and content for better AI response
-        const reason = errorMessage.content || errorMessage.code || 'Payment failed';
-        throw new Error(`Payment declined: ${reason}`);
-      }
-    }
-    
-    // Fallback to standard error format
-    throw new Error(errorData.message || 'Failed to complete checkout');
-  }
-  
-  return await response.json();
+  throw new Error('TODO: Implement completeCheckout - see workshop instructions');
 }
 
 
@@ -288,18 +241,12 @@ export async function completeCheckout(checkoutId, paymentToken, merchantUrl) {
  * TODO: Call POST /checkouts/:id/cancel on the Merchant service
  */
 export async function cancelCheckout(checkoutId, reason, merchantUrl) {
-  const response = await loggedACPFetch(`${merchantUrl}/checkouts/${checkoutId}/cancel`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reason }),
-  }, { endpoint: 'POST /checkouts/:id/cancel', flow: 'Agent → Merchant' });
+  // TODO: Implement this function
+  // Call: POST ${merchantUrl}/checkouts/${checkoutId}/cancel
+  // Send { reason } in the body
+  // Return the cancelled checkout object
   
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to cancel checkout');
-  }
-  
-  return await response.json();
+  throw new Error('TODO: Implement cancelCheckout - see workshop instructions');
 }
 
 
