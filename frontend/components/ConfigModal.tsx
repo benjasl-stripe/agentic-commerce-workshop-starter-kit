@@ -185,7 +185,7 @@ export default function ConfigModal({ onClose }: ConfigModalProps) {
             </div>
           </CollapsibleSection>
 
-          {/* Stripe Section */}
+          {/* Stripe Section - Hidden for now, key comes from backend .env
           <CollapsibleSection
             title="Stripe"
             icon="💳"
@@ -208,6 +208,7 @@ export default function ConfigModal({ onClose }: ConfigModalProps) {
               </p>
             </div>
           </CollapsibleSection>
+          */}
 
           {/* Test Mode */}
           <div className="border-t-2 border-gray-200 pt-4">
