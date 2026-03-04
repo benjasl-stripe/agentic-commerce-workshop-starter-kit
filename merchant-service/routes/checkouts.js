@@ -249,7 +249,7 @@ router.post('/', (req, res) => {
   // TODO: Implement this endpoint
   return res.status(501).json({
     error: 'TODO: Implement POST /checkouts',
-    hint: 'See workshop Module 3, Chapter 2'
+    hint: 'See workshop Module 4, Chapter 2'
   });
 });
 
@@ -267,7 +267,7 @@ router.get('/:id', (req, res) => {
   // TODO: Implement this endpoint
   return res.status(501).json({
     error: 'TODO: Implement GET /checkouts/:id',
-    hint: 'See workshop Module 3, Chapter 3'
+    hint: 'See workshop Module 4, Chapter 3'
   });
 });
 
@@ -289,7 +289,7 @@ router.put('/:id', (req, res) => {
   // TODO: Implement this endpoint
   return res.status(501).json({
     error: 'TODO: Implement PUT /checkouts/:id',
-    hint: 'See workshop Module 3, Chapter 3'
+    hint: 'See workshop Module 4, Chapter 3'
   });
 });
 
@@ -315,7 +315,7 @@ router.post('/:id/complete', async (req, res) => {
   // TODO: Implement this endpoint
   return res.status(501).json({
     error: 'TODO: Implement POST /checkouts/:id/complete',
-    hint: 'See workshop Module 3, Chapter 4'
+    hint: 'See workshop Module 4, Chapter 4'
   });
 });
 
@@ -335,7 +335,7 @@ router.post('/:id/cancel', (req, res) => {
   // TODO: Implement this endpoint
   return res.status(501).json({
     error: 'TODO: Implement POST /checkouts/:id/cancel',
-    hint: 'See workshop Module 3, Chapter 5'
+    hint: 'See workshop Module 4, Chapter 5'
   });
 });
 
