@@ -12,7 +12,7 @@ import { getStripeConfig, createSetupIntent, savePaymentMethod } from '@/lib/api
 import { getConfig, getOrCreateCustomerId, getUserEmail } from '@/lib/config';
 
 interface PaymentSetupProps {
-  onSuccess: (paymentMethodId: string) => void;
+  onSuccess: (paymentMethodId: string, last4?: string) => void;
   onCancel: () => void;
   email?: string;
 }
@@ -94,9 +94,14 @@ function SetupForm({ onSuccess, onCancel, email }: PaymentSetupProps) {
         //   ? setupIntent.payment_method 
         //   : setupIntent.payment_method.id;
         // 
+        // // Extract last4 from payment method if available
+        // const last4 = typeof setupIntent.payment_method === 'object' 
+        //   ? setupIntent.payment_method.card?.last4 
+        //   : undefined;
+        // 
         // console.log('💳 Saving payment method for session customer:', customerId);
         // await savePaymentMethod(customerId, paymentMethodId);
-        // onSuccess(paymentMethodId);  // ← Important! Closes the modal
+        // onSuccess(paymentMethodId, last4);  // ← Pass last4 to update profile display
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred');

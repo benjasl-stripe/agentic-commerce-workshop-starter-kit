@@ -163,12 +163,11 @@ export default function ProfileSettings({ isOpen, onClose, onProfileUpdate, init
     });
   };
 
-  const handlePaymentSuccess = (paymentMethodId: string) => {
-    // Extract last 4 from the test card (in real app, get from Stripe)
+  const handlePaymentSuccess = (paymentMethodId: string, last4?: string) => {
     saveProfile({
       ...profile,
       paymentMethodId,
-      paymentMethodLast4: '4242', // In production, get this from the PaymentMethod object
+      paymentMethodLast4: last4 || '****', // Use actual last4 from Stripe, fallback to ****
     });
     setShowPaymentSetup(false);
   };
