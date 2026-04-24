@@ -29,6 +29,7 @@ const STORAGE_KEYS = {
   messages: 'acpChatMessages',
   checkout: 'acpCheckoutState',
   hasPaymentMethod: 'acpHasPaymentMethod',
+  inputHistory: 'acpInputHistory',
 };
 
 function loadPersistedChat(): {
@@ -106,6 +107,14 @@ export default function ChatInterface() {
   const [hasLoadedFromStorage, setHasLoadedFromStorage] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [inputHistory, setInputHistory] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.inputHistory);
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+  const historyIndex = useRef<number>(-1);
 
   // Track mounted state to avoid hydration mismatch
   useEffect(() => {
@@ -254,12 +263,59 @@ export default function ChatInterface() {
     setMessages(prev => [...prev, { role: 'assistant', content }]);
   };
 
+  const moveCursorToEnd = () => {
+    setTimeout(() => {
+      if (!inputRef.current) return;
+      const length = inputRef.current.value.length;
+      inputRef.current.selectionStart = length;
+      inputRef.current.selectionEnd = length;
+    }, 0);
+  };
+
+  const canNavigateHistory = (textarea: HTMLTextAreaElement) => {
+    if (inputHistory.length === 0) return false;
+
+    const { selectionStart, selectionEnd, value } = textarea;
+    const length = value.length;
+    const isAtEdge = (selectionStart === 0 && selectionEnd === 0)
+      || (selectionStart === length && selectionEnd === length);
+
+    return isAtEdge || input === '';
+  };
+
+  const setHistoryInput = (nextIndex: number) => {
+    historyIndex.current = nextIndex;
+    setInput(nextIndex === -1 ? '' : inputHistory[nextIndex]);
+    moveCursorToEnd();
+  };
+
+  const navigateHistory = (direction: 'older' | 'newer') => {
+    if (direction === 'older') {
+      const nextIndex = historyIndex.current === -1
+        ? inputHistory.length - 1
+        : Math.max(0, historyIndex.current - 1);
+      setHistoryInput(nextIndex);
+      return;
+    }
+
+    const nextIndex = historyIndex.current < inputHistory.length - 1
+      ? historyIndex.current + 1
+      : -1;
+    setHistoryInput(nextIndex);
+  };
+
   // Handle chat submissions - AI handles all checkout logic via function calling
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
     const userMessage = input.trim();
+    setInputHistory(prev => {
+      const next = [...prev, userMessage];
+      try { localStorage.setItem(STORAGE_KEYS.inputHistory, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    historyIndex.current = -1;
     setInput('');
     setError(null);
 
@@ -338,6 +394,18 @@ export default function ChatInterface() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
+      return;
+    }
+
+    if (e.key === 'ArrowUp' && canNavigateHistory(e.currentTarget)) {
+      e.preventDefault();
+      navigateHistory('older');
+      return;
+    }
+
+    if (e.key === 'ArrowDown' && historyIndex.current !== -1 && canNavigateHistory(e.currentTarget)) {
+      e.preventDefault();
+      navigateHistory('newer');
     }
   };
 
@@ -367,10 +435,12 @@ export default function ChatInterface() {
     setMessages([]);
     setCheckoutState(null);
     setHasPaymentMethod(false);
+    setInputHistory([]);
     setProfileComplete(false);
     setUserEmail('');
     setError(null);
     clearPersistedChat();
+    localStorage.removeItem(STORAGE_KEYS.inputHistory);
     // Clear profile data from localStorage
     localStorage.removeItem('userProfile');
     // Clear anonymous customer ID
