@@ -42,7 +42,7 @@ export function getPendingLogs() {
  * @param {string} metadata.endpoint - Endpoint name
  * @param {string} metadata.flow - Flow direction (e.g., 'Agent → Merchant', 'Agent → Stripe')
  */
-export async function loggedACPFetch(url, options = {}, metadata = {}) {
+export async function loggedUCPFetch(url, options = {}, metadata = {}) {
   const method = (options.method || 'GET').toUpperCase();
   const startTime = Date.now();
   
@@ -129,5 +129,5 @@ function extractEndpoint(url) {
   }
 }
 
-export default { logACPCall, getPendingLogs, loggedACPFetch };
+export default { logACPCall, getPendingLogs, loggedUCPFetch };
 

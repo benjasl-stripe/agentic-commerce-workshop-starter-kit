@@ -14,7 +14,7 @@ import {
 } from './checkout.js';
 import { createSPT, getCustomerPaymentMethods } from './payment.js';
 import { profiles } from './profile.js';
-import { getPendingLogs } from '../lib/acp-call-logger.js';
+import { getPendingLogs } from '../lib/ucp-call-logger.js';
 import { createChatCompletion } from '../lib/openai.js';
 
 const router = express.Router();

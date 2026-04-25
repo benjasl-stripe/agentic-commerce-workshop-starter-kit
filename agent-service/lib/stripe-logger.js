@@ -3,7 +3,7 @@
  * Logs Stripe SDK operations to the UCP inspector
  */
 
-import { logACPCall } from './acp-call-logger.js';
+import { logACPCall } from './ucp-call-logger.js';
 
 /**
  * Log a Stripe SDK call

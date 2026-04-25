@@ -74,7 +74,7 @@ Migration from Agentic Commerce Protocol (ACP) to Universal Commerce Protocol (U
 - Updated comments from ACP to UCP
 
 ### 11. Agent Service - Call Logger
-**File:** `agent-service/lib/acp-call-logger.js`
+**File:** `agent-service/lib/ucp-call-logger.js`
 - Updated all comments from ACP to UCP
 - Updated console log messages
 - Updated endpoint extraction to support /checkout-sessions paths
@@ -107,7 +107,7 @@ Migration from Agentic Commerce Protocol (ACP) to Universal Commerce Protocol (U
 
 ## Files NOT Renamed (kept for backwards compatibility)
 
-- `agent-service/lib/acp-call-logger.js` - Function names kept as `logACPCall`, `loggedACPFetch`
+- `agent-service/lib/ucp-call-logger.js` - Function names kept as `logACPCall`, `loggedUCPFetch`
 - `frontend/lib/acp-logger.ts` - Class kept as `ACPLogger`
 - `frontend/components/ACPInspector.tsx` - Component kept as `ACPInspector`
 
