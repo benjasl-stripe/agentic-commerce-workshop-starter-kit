@@ -9,7 +9,7 @@
  */
 
 import express from 'express';
-import { loggedACPFetch } from '../lib/acp-call-logger.js';
+import { loggedUCPFetch } from '../lib/ucp-call-logger.js';
 
 const router = express.Router();
 
@@ -54,7 +54,7 @@ router.post('/create', async (req, res) => {
     // Call the exported function
     const checkout = await createCheckout(items, buyer, merchantUrl);
     
-    const { getPendingLogs } = await import('../lib/acp-call-logger.js');
+    const { getPendingLogs } = await import('../lib/ucp-call-logger.js');
     res.json({ ...checkout, acpLogs: getPendingLogs() });
     
   } catch (error) {
@@ -76,7 +76,7 @@ router.get('/:id', async (req, res) => {
     
     const checkout = await getCheckout(id, merchantUrl);
     
-    const { getPendingLogs } = await import('../lib/acp-call-logger.js');
+    const { getPendingLogs } = await import('../lib/ucp-call-logger.js');
     res.json({ ...checkout, acpLogs: getPendingLogs() });
     
   } catch (error) {
@@ -105,7 +105,7 @@ router.put('/:id', async (req, res) => {
     
     const checkout = await updateCheckout(id, updates, merchantUrl);
     
-    const { getPendingLogs } = await import('../lib/acp-call-logger.js');
+    const { getPendingLogs } = await import('../lib/ucp-call-logger.js');
     res.json({ ...checkout, acpLogs: getPendingLogs() });
     
   } catch (error) {
@@ -132,7 +132,7 @@ router.post('/:id/complete', async (req, res) => {
     
     const checkout = await completeCheckout(id, paymentToken, merchantUrl);
     
-    const { getPendingLogs } = await import('../lib/acp-call-logger.js');
+    const { getPendingLogs } = await import('../lib/ucp-call-logger.js');
     res.json({ ...checkout, acpLogs: getPendingLogs() });
     
   } catch (error) {
@@ -155,7 +155,7 @@ router.post('/:id/cancel', async (req, res) => {
     
     const checkout = await cancelCheckout(id, reason, merchantUrl);
     
-    const { getPendingLogs } = await import('../lib/acp-call-logger.js');
+    const { getPendingLogs } = await import('../lib/ucp-call-logger.js');
     res.json({ ...checkout, acpLogs: getPendingLogs() });
     
   } catch (error) {
@@ -169,29 +169,16 @@ router.post('/:id/cancel', async (req, res) => {
 // TODO: Implement these functions to call the Merchant's UCP endpoints
 // ============================================================================
 
-/**
- * Create a new checkout session
- * 
- * TODO: Call POST /checkout-sessions on the Merchant service
- * - Send items array and optional buyer info
- * - Include catalog name if provided
- * - Return the checkout object from the Merchant
- */
-export async function createCheckout(items, buyer, merchantUrl, catalog = null) {
+// TODO: Call POST /checkout-sessions on the Merchant service
+export async function createCheckout(items, buyer, merchantUrl) {
   // TODO: Implement this function
-  // Build the request body with items, buyer (optional), and catalog (optional)
-  // Call: POST ${merchantUrl}/checkout-sessions
-  // Return the checkout object from the response
-  
-  throw new Error('TODO: Implement createCheckout - see workshop instructions');
+  throw new Error('TODO: Implement createCheckout - call POST /checkout-sessions on Merchant');
 }
 
 
-/**
- * Get checkout by ID
- * 
- * TODO: Call GET /checkout-sessions/:id on the Merchant service
- */
+
+// TODO: Call GET /checkout-sessions/{id} on the Merchant service
+
 export async function getCheckout(checkoutId, merchantUrl) {
   // TODO: Implement this function
   // Call: GET ${merchantUrl}/checkout-sessions/${checkoutId}
@@ -200,15 +187,8 @@ export async function getCheckout(checkoutId, merchantUrl) {
   throw new Error('TODO: Implement getCheckout - see workshop instructions');
 }
 
+// TODO: Call PUT /checkout-sessions/{id} on the Merchant service
 
-/**
- * Update checkout with shipping address or fulfillment option
- * 
- * TODO: Call PUT /checkout-sessions/:id on the Merchant service
- * - Convert camelCase to snake_case for UCP protocol:
- *   fulfillmentAddress → fulfillment_address
- *   fulfillmentOptionId → fulfillment_option_id
- */
 export async function updateCheckout(checkoutId, updates, merchantUrl) {
   // TODO: Implement this function
   // Build body with snake_case keys: fulfillment_address, fulfillment_option_id
@@ -219,14 +199,9 @@ export async function updateCheckout(checkoutId, updates, merchantUrl) {
 }
 
 
-/**
- * Complete checkout with SPT payment token
- * 
- * TODO: Call POST /checkout-sessions/:id/complete on the Merchant service
- * - Send payment_data with the SPT token
- * - Handle payment errors (declined, fraud) from checkout.messages
- */
-export async function completeCheckout(checkoutId, paymentToken, merchantUrl) {
+ // TODO: Call POST /checkout-sessions/{id}/complete on the Merchant service
+
+ export async function completeCheckout(checkoutId, paymentToken, merchantUrl) {
   // TODO: Implement this function
   // Build body: { payment_data: { token: paymentToken, provider: 'stripe' } }
   // Call: POST ${merchantUrl}/checkout-sessions/${checkoutId}/complete
@@ -236,12 +211,8 @@ export async function completeCheckout(checkoutId, paymentToken, merchantUrl) {
   throw new Error('TODO: Implement completeCheckout - see workshop instructions');
 }
 
+// TODO: Call POST /checkout-sessions/{id}/cancel on the Merchant service
 
-/**
- * Cancel a checkout
- * 
- * TODO: Call POST /checkout-sessions/:id/cancel on the Merchant service
- */
 export async function cancelCheckout(checkoutId, reason, merchantUrl) {
   // TODO: Implement this function
   // Call: POST ${merchantUrl}/checkout-sessions/${checkoutId}/cancel
@@ -250,6 +221,7 @@ export async function cancelCheckout(checkoutId, reason, merchantUrl) {
   
   throw new Error('TODO: Implement cancelCheckout - see workshop instructions');
 }
+
 
 
 export default router;
