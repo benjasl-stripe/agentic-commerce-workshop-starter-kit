@@ -7,15 +7,6 @@
  * @see https://ucp.dev/2026-04-08/specification/checkout-rest/
  */
 
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
-
-// ============================================================================
-// DynamoDB Setup
-// ============================================================================
-
-const client = new DynamoDBClient({});
-const docClient = DynamoDBDocumentClient.from(client);
 
 // ============================================================================
 // UCP Tool Definitions for OpenAI Function Calling
@@ -181,119 +172,17 @@ const UCP_TOOLS = [
 ];
 
 // ============================================================================
-// DynamoDB Helper Functions
+// Logging
 // ============================================================================
 
 async function logAnalytics(currentPage, currentUrl, question, responseTime, tokenCount) {
-  const tableName = process.env.DYNAMODB_TABLE;
-  if (!tableName) {
-    console.log('No DynamoDB table configured, skipping analytics');
-    return;
-  }
-  
-  const timestamp = new Date().toISOString();
-  const item = {
-    pk: `ANALYTICS#${new Date().toISOString().split('T')[0]}`,
-    sk: `${Date.now()}#${Math.random().toString(36).substring(7)}`,
+  console.log(JSON.stringify({
     currentPage,
-    currentUrl: currentUrl || 'Unknown',
-    question: question.substring(0, 500),
+    currentUrl,
+    question,
     responseTime,
-    tokenCount,
-    timestamp,
-    ttl: Math.floor(Date.now() / 1000) + (90 * 24 * 60 * 60)
-  };
-  
-  try {
-    const command = new PutCommand({
-      TableName: tableName,
-      Item: item
-    });
-    
-    await docClient.send(command);
-    console.log('Analytics logged successfully');
-  } catch (error) {
-    console.error('Failed to log analytics:', error);
-  }
-}
-
-function simpleHash(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return Math.abs(hash).toString(36);
-}
-
-async function checkCache(question) {
-  const tableName = process.env.DYNAMODB_TABLE;
-  if (!tableName) return null;
-  
-  const questionHash = simpleHash(question.toLowerCase().trim());
-  
-  try {
-    const command = new GetCommand({
-      TableName: tableName,
-      Key: {
-        pk: `CACHE#${questionHash}`,
-        sk: 'response'
-      }
-    });
-    
-    const result = await docClient.send(command);
-    
-    if (result.Item) {
-      console.log('Cache hit for question:', question.substring(0, 50));
-      
-      const updateCommand = new PutCommand({
-        TableName: tableName,
-        Item: {
-          ...result.Item,
-          hitCount: (result.Item.hitCount || 0) + 1,
-          lastHit: new Date().toISOString()
-        }
-      });
-      docClient.send(updateCommand).catch(err => 
-        console.error('Failed to update cache hit count:', err)
-      );
-      
-      return result.Item.response;
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Cache check failed:', error);
-    return null;
-  }
-}
-
-async function cacheResponse(question, response) {
-  const tableName = process.env.DYNAMODB_TABLE;
-  if (!tableName) return;
-  
-  const questionHash = simpleHash(question.toLowerCase().trim());
-  
-  try {
-    const command = new PutCommand({
-      TableName: tableName,
-      Item: {
-        pk: `CACHE#${questionHash}`,
-        sk: 'response',
-        question: question.substring(0, 500),
-        response,
-        hitCount: 0,
-        createdAt: new Date().toISOString(),
-        ttl: Math.floor(Date.now() / 1000) + (24 * 60 * 60)
-      }
-    });
-    
-    await docClient.send(command);
-    console.log('Response cached successfully');
-  } catch (error) {
-    console.error('Failed to cache response:', error);
-  }
+    tokenCount
+  }))
 }
 
 // ============================================================================
@@ -301,6 +190,13 @@ async function cacheResponse(question, response) {
 // ============================================================================
 
 export const lambdaHandler = async (event, context) => {
+
+  console.log(JSON.stringify({
+    httpMethod: event.httpMethod,
+    path: event.path,
+    hasBody: !!event.body,
+  }));
+
   const startTime = Date.now();
   
   const headers = {
@@ -370,23 +266,8 @@ export const lambdaHandler = async (event, context) => {
     console.log('Tool results provided:', toolResults?.length || 0);
     
     // Build system prompt from context provided by caller
-    let systemPrompt = workshopContext || `You are a helpful AI shopping assistant for an equipment store.
-
-You help customers browse products and make purchases. When a customer wants to buy something, use the create_checkout function. Guide them through the checkout process step by step.
-
-Be friendly, helpful, and concise. Use markdown formatting for better readability.
-
+    let systemPrompt = workshopContext || `
 ## IMPORTANT: Displaying Products
-When listing or recommending products, use the special product tag format: [PRODUCT:product_id]
-This renders a product card showing the name, price, and details automatically.
-
-Example response when asked about products:
-"Here are some great options:
-
-[PRODUCT:SKI-001]
-[PRODUCT:SKI-002]
-
-Let me know which one interests you!"
 
 RULES:
 - DO NOT write the product name before or after the tag - the card shows it automatically
@@ -547,12 +428,6 @@ ${checkoutState.status === 'completed' ? '- 🎉 Order complete!' : ''}
     // Regular text response
     const responseContent = message.content;
     console.log('Returning text response');
-
-    // Cache the response (only for non-tool-call responses)
-    if (responseContent && !toolResults) {
-      cacheResponse(userQuestion, responseContent)
-        .catch(err => console.error('Failed to cache response:', err));
-    }
 
     return {
       statusCode: 200,

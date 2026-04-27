@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Start all 3 services for ACP Production Demo
+# Start all 3 services for UCP Production Demo
 
 # Store the root directory
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -124,7 +124,7 @@ sleep 2
 
 echo ""
 echo "═══════════════════════════════════════════════════"
-echo "  🚀 ACP Production Demo - All Services Running"
+echo "  🚀 UCP Production Demo - All Services Running"
 echo "═══════════════════════════════════════════════════"
 echo ""
 echo "  📱 Frontend         http://localhost:3000"
