@@ -8,14 +8,15 @@
  * - POST /webhooks/stripe - Receive Stripe webhook events
  */
 import express from 'express';
-import Stripe from 'stripe';
-import { checkouts } from './checkout-sessions.js';
+// TODO: Uncomment these imports when implementing the webhook handler:
+// import Stripe from 'stripe';
+// import { checkouts } from './checkout-sessions.js';
 
 const router = express.Router();
 
-// Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+// TODO: Uncomment these when implementing:
+// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
 /**
  * POST /webhooks/stripe - Handle Stripe webhook events
