@@ -391,6 +391,12 @@ export default function ChatInterface() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ignore Enter while an IME (e.g. Japanese input) is composing.
+    // keyCode 229 covers Safari, which fires this keydown after compositionend.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) {
+      return;
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
