@@ -68,6 +68,13 @@ interface ChatResponse {
   updatedEmail?: string;
   products?: Array<any>;
   acpLogs?: Array<any>;
+  mppUnlock?: {
+    spent?: boolean;
+    capability_id?: string;
+    paid?: string;
+    rail?: string;
+    receipt?: { reference?: string } | null;
+  } | null;
 }
 
 interface CheckoutResponse extends CheckoutState {}
@@ -86,6 +93,18 @@ function getMerchantUrl(config: Config): string | null {
   } catch {
     // If URL parsing fails, try to strip common suffixes
     return config.productsApiUrl.replace(/\/api\/.*$/, '');
+  }
+}
+
+export async function getAgentHealth(): Promise<{ mppConfigured?: boolean }> {
+  const config = getConfig();
+  const agentUrl = config.agentServiceUrl || 'http://localhost:3001';
+  try {
+    const response = await fetch(`${agentUrl}/health`);
+    if (!response.ok) return {};
+    return await response.json();
+  } catch {
+    return {};
   }
 }
 

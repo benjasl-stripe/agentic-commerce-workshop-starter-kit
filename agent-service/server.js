@@ -17,6 +17,8 @@ import chatRouter from './routes/chat.js';
 import checkoutRouter from './routes/checkout.js';
 import paymentRouter from './routes/payment.js';
 import profileRouter from './routes/profile.js';
+import capabilitiesRouter from './routes/capabilities.js';
+import { isMppConfigured } from './lib/capabilities.js';
 
 dotenv.config();
 
@@ -38,6 +40,7 @@ app.use('/api/chat', chatRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/payment', paymentRouter);
 app.use('/api/profile', profileRouter);
+app.use('/api/capabilities', capabilitiesRouter);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -74,6 +77,7 @@ app.get('/health', (req, res) => {
     lambdaEndpoint: process.env.LAMBDA_ENDPOINT || null,
     stripeProxyUrl: process.env.STRIPE_PROXY_URL || 'http://localhost:3002',
     merchantUrl: process.env.MERCHANT_API_URL || null,
+    mppConfigured: isMppConfigured(),
   });
 });
 

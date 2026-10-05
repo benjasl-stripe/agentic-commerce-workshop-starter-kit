@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { 
   sendChatMessage, 
+  getAgentHealth,
   CheckoutState,
   getPaymentMethods,
   deletePaymentMethods,
@@ -82,6 +83,28 @@ function clearPersistedChat(): void {
   localStorage.removeItem(STORAGE_KEYS.messages);
   localStorage.removeItem(STORAGE_KEYS.checkout);
   localStorage.removeItem(STORAGE_KEYS.hasPaymentMethod);
+  localStorage.removeItem('acpAgentSpend');
+}
+
+type AgentSpendEntry = {
+  capability_id: string;
+  paid: string;
+  rail: string;
+  reference?: string;
+};
+
+function loadAgentSpend(): AgentSpendEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('acpAgentSpend');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function spendTotal(entries: AgentSpendEntry[]): number {
+  return entries.reduce((sum, entry) => sum + (parseFloat(entry.paid) || 0), 0);
 }
 
 // ============================================================================
@@ -103,6 +126,9 @@ export default function ChatInterface() {
   const [profileInitialTab, setProfileInitialTab] = useState<'info' | 'address' | 'shipping' | 'payment'>('info');
   const [profileComplete, setProfileComplete] = useState(false);
   const [showBasket, setShowBasket] = useState(false);
+  const [mppConfigured, setMppConfigured] = useState(false);
+  const [agentSpend, setAgentSpend] = useState<AgentSpendEntry[]>([]);
+  const [spendOpen, setSpendOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [hasLoadedFromStorage, setHasLoadedFromStorage] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -163,6 +189,8 @@ export default function ChatInterface() {
     if (persisted.hasPaymentMethod) {
       setHasPaymentMethod(persisted.hasPaymentMethod);
     }
+    setAgentSpend(loadAgentSpend());
+    getAgentHealth().then((health) => setMppConfigured(!!health.mppConfigured));
     setHasLoadedFromStorage(true);
   }, [mounted]);
 
@@ -377,6 +405,25 @@ export default function ChatInterface() {
       if (response.products && response.products.length > 0) {
         setProducts(response.products);
       }
+
+      if (response.mppUnlock?.spent) {
+        setMppConfigured(true);
+        setAgentSpend((prev) => {
+          const reference = response.mppUnlock?.receipt?.reference;
+          if (reference && prev.some((entry) => entry.reference === reference)) return prev;
+          const next = [
+            ...prev,
+            {
+              capability_id: response.mppUnlock?.capability_id || 'ski-reviews',
+              paid: response.mppUnlock?.paid || '0.01',
+              rail: response.mppUnlock?.rail || 'tempo-testnet',
+              reference,
+            },
+          ];
+          localStorage.setItem('acpAgentSpend', JSON.stringify(next));
+          return next;
+        });
+      }
       
       // Show AI response
       if (response.content) {
@@ -433,6 +480,8 @@ export default function ChatInterface() {
     }
     
     setMessages([]);
+    setAgentSpend([]);
+    setSpendOpen(false);
     setCheckoutState(null);
     setHasPaymentMethod(false);
     setInputHistory([]);
@@ -470,6 +519,28 @@ export default function ChatInterface() {
           {/* Status Row - only render after mounted to avoid hydration mismatch */}
           {mounted && (
             <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+              {mppConfigured && (
+                <button
+                  type="button"
+                  onClick={() => setSpendOpen((open) => !open)}
+                  className="text-xs bg-teal-400 text-teal-950 font-semibold px-2 py-1 rounded-full hover:bg-teal-300"
+                  title="Agent micropayments on Tempo testnet"
+                >
+                  🤖 Agent spent ${spendTotal(agentSpend).toFixed(2)}
+                </button>
+              )}
+              {spendOpen && (
+                <div className="basis-full text-xs bg-black/20 rounded-lg px-3 py-2 text-left">
+                  {agentSpend.length === 0
+                    ? 'MPP is on. No micropayments yet.'
+                    : agentSpend.slice(-4).reverse().map((entry) => (
+                        <div key={entry.reference || `${entry.capability_id}-${entry.paid}`}>
+                          ${entry.paid} · {entry.capability_id} · {entry.rail}
+                          {entry.reference ? ` · ${entry.reference.slice(0, 10)}…` : ''}
+                        </div>
+                      ))}
+                </div>
+              )}
               {products.length > 0 && (
                 <span className="text-xs bg-green-500 bg-opacity-80 px-2 py-1 rounded-full">
                   📚 {products.length} products
@@ -564,10 +635,10 @@ export default function ChatInterface() {
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[85%] p-3 rounded-2xl text-sm ${
+                className={`max-w-[85%] rounded-2xl ${
                   msg.role === 'user'
-                    ? 'bg-gradient-to-r from-purple-600 to-indigo-700 text-white rounded-br-sm'
-                    : 'bg-white text-gray-800 shadow-md rounded-bl-sm'
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-700 text-white rounded-br-sm px-4 py-3 text-[15px] leading-6'
+                    : 'bg-white text-gray-800 shadow-md rounded-bl-sm px-4 py-3.5'
                 }`}
               >
                 {msg.role === 'assistant' ? (

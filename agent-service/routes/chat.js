@@ -16,6 +16,7 @@ import { createSPT, getCustomerPaymentMethods } from './payment.js';
 import { profiles } from './profile.js';
 import { getPendingLogs } from '../lib/ucp-call-logger.js';
 import { createChatCompletion } from '../lib/openai.js';
+import { isMppConfigured, maybeUnlockSkiReviews, withMppSpendNotice } from '../lib/capabilities.js';
 
 const router = express.Router();
 
@@ -497,6 +498,18 @@ router.post('/', async (req, res) => {
       });
     }
     
+    // Module 7 only. With no Tempo key this is a no-op and chat is unchanged.
+    let mppUnlock = null;
+    if (isMppConfigured()) {
+      const latestUserMessage = [...sanitizedMessages].reverse().find((m) => m.role === 'user')?.content || '';
+      mppUnlock = await maybeUnlockSkiReviews({
+        userMessage: latestUserMessage,
+        products,
+        merchantUrl: effectiveMerchantUrl,
+        lambdaEndpoint: effectiveLambdaEndpoint,
+      });
+    }
+
     // Extract catalog name from productsApiUrl (e.g., /api/tv -> tv, /api/skis -> skis)
     let catalogName = null;
     if (effectiveProductsUrl) {
@@ -556,6 +569,7 @@ router.post('/', async (req, res) => {
           aiPersona,
           userProfile,
           hasStripePaymentMethod,
+          mppUnlock,
           lambdaEndpoint: effectiveLambdaEndpoint
         });
         
@@ -616,7 +630,8 @@ router.post('/', async (req, res) => {
           // Got a text response, we're done
           console.log('   ✅ Text response received');
           return res.json({
-            content: response.content,
+            content: withMppSpendNotice(response.content, mppUnlock),
+            mppUnlock,
             checkoutState: currentCheckout,
             showPaymentSetup,
             updatedEmail,
