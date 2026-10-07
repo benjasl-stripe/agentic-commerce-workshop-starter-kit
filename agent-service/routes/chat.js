@@ -498,14 +498,14 @@ router.post('/', async (req, res) => {
       });
     }
     
-    // Module 7 only. With no Tempo key this is a no-op and chat is unchanged.
+    // Module 6 only. With no Tempo key this is a no-op and chat is unchanged.
+    // The article is hosted; checkout still uses the local merchant.
     let mppUnlock = null;
     if (isMppConfigured()) {
       const latestUserMessage = [...sanitizedMessages].reverse().find((m) => m.role === 'user')?.content || '';
       mppUnlock = await maybeUnlockSkiReviews({
         userMessage: latestUserMessage,
         products,
-        merchantUrl: effectiveMerchantUrl,
         lambdaEndpoint: effectiveLambdaEndpoint,
       });
     }

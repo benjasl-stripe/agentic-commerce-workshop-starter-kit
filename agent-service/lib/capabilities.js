@@ -1,12 +1,12 @@
 /**
- * MPP client for Module 7 (Tempo testnet).
+ * MPP client for Module 6 (Tempo testnet).
  *
- * Safe to ship in the starter kit: nothing here runs during Modules 1–6.
- * Chat only calls maybeUnlockSkiReviews when AGENT_TEMPO_PRIVATE_KEY is set,
- * and any failure (no mppx yet, merchant route missing) is skipped so checkout
- * still works.
+ * Safe to ship in the starter kit: nothing here runs during Modules 1–5.
+ * Chat only calls maybeUnlockSkiReviews when AGENT_TEMPO_PRIVATE_KEY is set.
+ * The paid resource is the hosted Contents Not Dead article, not the local merchant.
+ * Any failure is skipped so checkout still works.
  *
- * mppx is imported inside buyCapability, not at startup. Install it in Module 7:
+ * mppx is imported inside payUrl, not at startup. Install it in Module 6:
  *   npm install mppx viem --legacy-peer-deps
  *
  * @see https://mpp.dev/protocol
@@ -82,28 +82,20 @@ function createClient(mppx, account) {
   });
 }
 
-export async function listCapabilities(merchantUrl) {
-  const response = await fetch(`${merchantUrl}/capabilities`);
-  if (!response.ok) {
-    throw new Error(`Could not fetch capabilities (${response.status})`);
-  }
-  return await response.json();
+export const HOSTED_ARTICLE = {
+  id: 'agentic-ski-shopping',
+  name: 'Three Skis Worth Sending Your Agent After',
+  description:
+    'Paid article comparing the catalog skis: who each is for and how they differ. Not in the free blurbs. $0.50 on Tempo testnet. No account or API key.',
+};
+
+const DEFAULT_CONTENT_URL = 'https://api.contentsnotdead.com/api/content/agentic-ski-shopping';
+
+export function contentUrl() {
+  return process.env.MPP_CONTENT_URL?.trim() || DEFAULT_CONTENT_URL;
 }
 
-/**
- * Pay the 402 and return the merchant body plus the MPP receipt.
- * No cache: each call is a new micropayment.
- */
-export async function buyCapability(capabilityId, merchantUrl) {
-  const listed = await listCapabilities(merchantUrl);
-  const capability = listed.capabilities?.find((c) => c.id === capabilityId);
-  if (!capability) {
-    throw new Error(`Unknown capability: ${capabilityId}`);
-  }
-
-  const path = capability.url || `/capabilities/${capabilityId}`;
-  const url = path.startsWith('http') ? path : `${merchantUrl}${path}`;
-
+async function payUrl(url) {
   const mppx = await loadMppx();
   const key = process.env.AGENT_TEMPO_PRIVATE_KEY;
   if (!key?.startsWith('0x')) {
@@ -111,10 +103,9 @@ export async function buyCapability(capabilityId, merchantUrl) {
   }
   const account = mppx.privateKeyToAccount(key);
 
-  console.log('🤖 Agent acquiring capability via MPP (Tempo testnet)');
+  console.log('🤖 Agent acquiring article via MPP (Tempo testnet)');
   console.log(`   payer: ${account.address}`);
   console.log(`   GET ${url}  (expect 402 → micropay → retry)`);
-  console.log(`   listed price: ${capability.price_display} on ${capability.method}/${capability.network}`);
 
   const response = await createClient(mppx, account).fetch(url);
   if (!response.ok) {
@@ -127,9 +118,45 @@ export async function buyCapability(capabilityId, merchantUrl) {
     console.log(`   🧾 Payment-Receipt: status=${receipt.status} ref=${receipt.reference}`);
   }
 
-  const result = await response.json();
-  console.log(`   ✅ Capability unlocked via MPP micropayment: ${capabilityId}`);
-  return { ...result, receipt, fromCache: false };
+  const type = response.headers.get('content-type') || '';
+  const body = type.includes('json') ? await response.json() : await response.text();
+  console.log('   ✅ Article unlocked via MPP');
+  return { body, receipt };
+}
+
+/** Pay the hosted article. The body may be markdown. No local merchant. */
+export async function buyContentUrl(url) {
+  const paid = await payUrl(url);
+  if (typeof paid.body === 'string') {
+    return {
+      capability_id: 'agentic-ski-shopping',
+      paid: '0.50',
+      rail: 'tempo-testnet',
+      data: {
+        format: 'markdown',
+        title: "Three Skis Worth Sending Your Agent After",
+        content: paid.body,
+      },
+      receipt: paid.receipt,
+      fromCache: false,
+    };
+  }
+  const result = paid.body && typeof paid.body === 'object' ? paid.body : {};
+  if (typeof result.content === 'string' && !result.data) {
+    result.data = {
+      format: 'markdown',
+      title: result.title || "Three Skis Worth Sending Your Agent After",
+      content: result.content,
+    };
+  }
+  return {
+    capability_id: 'agentic-ski-shopping',
+    paid: '0.50',
+    rail: 'tempo-testnet',
+    ...result,
+    receipt: paid.receipt,
+    fromCache: false,
+  };
 }
 
 export function normalizeCapabilityUnlock(unlocked, extras = {}) {
@@ -152,12 +179,23 @@ export function normalizeCapabilityUnlock(unlocked, extras = {}) {
   };
 }
 
+function withoutAccessDisclaimer(content) {
+  if (!content) return content;
+  return content
+    .replace(
+      /^(?:I (?:can(?:'|no)t|cannot|am unable to) (?:access|browse|visit|open)[\s\S]{0,500}?(?:research paper|article)[\s\S]{0,240}?:\s*)/i,
+      '',
+    )
+    .trim();
+}
+
 export function withMppSpendNotice(content, unlock) {
   if (!unlock?.spent) return content;
+  content = withoutAccessDisclaimer(content);
   const ref = unlock.receipt?.reference ? `\nTx: \`${unlock.receipt.reference}\`` : '';
   const notice = [
     '---',
-    `🤖 **Agent spend:** I just paid **$${unlock.paid || '0.01'}** (OUSD on ${unlock.rail || 'tempo-testnet'}) via MPP to unlock \`${unlock.capability_id || 'ski-reviews'}\` and answer your question.${ref}`,
+    `🤖 **Agent spend:** I just paid **$${unlock.paid || '0.50'}** on Tempo testnet via MPP to unlock \`${unlock.capability_id || 'agentic-ski-shopping'}\` and answer your question.${ref}`,
   ].join('\n');
   return `${content || ''}\n\n${notice}`;
 }
@@ -235,29 +273,20 @@ Return ONLY JSON: {"unlock":boolean,"reason":string}`,
 }
 
 /**
- * Called from chat. Returns null unless the wallet is set, the merchant
- * advertises a capability, and the model says the catalog is not enough.
- * Never throws — a Module 7 problem must not fail checkout chat.
+ * Called from chat. Returns null unless the wallet is set and the model
+ * says the catalog is not enough. Pays the hosted article, never the local merchant.
+ * Never throws — a Module 6 problem must not fail checkout chat.
  */
-export async function maybeUnlockSkiReviews({ userMessage, products, merchantUrl, lambdaEndpoint }) {
-  if (!isMppConfigured() || !merchantUrl || !userMessage) return null;
-
-  let capabilities = [];
-  try {
-    const listed = await listCapabilities(merchantUrl);
-    capabilities = listed.capabilities || [];
-  } catch (err) {
-    console.log(`   ⚠️ MPP discovery skipped: ${err.message}`);
-    return null;
-  }
-  if (capabilities.length === 0) return null;
+export async function maybeUnlockSkiReviews({ userMessage, products, lambdaEndpoint }) {
+  if (!isMppConfigured() || !userMessage) return null;
+  const url = contentUrl();
 
   try {
     console.log('   🧠 Asking model whether the catalog is enough…');
     const decision = await decideUnlock({
       userMessage,
       products,
-      capabilities,
+      capabilities: [HOSTED_ARTICLE],
       lambdaEndpoint,
     });
     console.log(
@@ -265,9 +294,9 @@ export async function maybeUnlockSkiReviews({ userMessage, products, merchantUrl
     );
     if (!decision.unlock) return null;
 
-    const capabilityId = decision.capability_id || 'ski-reviews';
-    console.log(`   🤖 Catalog is not enough — acquiring ${capabilityId} via MPP`);
-    const unlocked = await buyCapability(capabilityId, merchantUrl);
+    const capabilityId = HOSTED_ARTICLE.id;
+    console.log(`   🤖 Catalog is not enough — acquiring ${url} via MPP`);
+    const unlocked = await buyContentUrl(url);
     const normalized = normalizeCapabilityUnlock(unlocked, {
       capability_id: capabilityId,
       reason: decision.reason,

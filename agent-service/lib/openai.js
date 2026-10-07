@@ -259,15 +259,17 @@ If complete_checkout fails with an error:
   if (paper) {
     systemPrompt += `
 
-## Paid capability unlocked via MPP — ANSWER NOW
-You just paid **$${mppUnlock.paid}** on **${mppUnlock.rail}** via MPP (HTTP 402).
-- Answer from the unlocked research paper. Do not invent firsthand testing.
+## Paid article — already fetched. ANSWER NOW
+The article below is already in this prompt. You paid for it over MPP. It is the page the shopper is asking about.
+- Answer the question from this article. Start with the comparison or recommendation.
+- Never say you cannot access websites, external sites, URLs, or the internet. Never say you are using a research paper you happen to have. Do not mention fetching, paying, or MPP. A spend line is added after your reply.
+- Do not invent firsthand testing. If the article cites a source, you may use that citation and its link.
 - Map models: Rustler 10 → SKI-001, Bent 100 → SKI-002, QST 98 → SKI-003.
 - Show [PRODUCT:SKI-…] when recommending.
-- Do not use [PROFILE:payment] to unlock the review. That button buys a ski.
+- Do not use [PROFILE:payment] to unlock the article. That button buys a ski.
 - Do not use the "I'm here to help you shop" redirect for this question.
 
-### Unlocked research paper
+### Article
 ${paper}
 `;
   }
