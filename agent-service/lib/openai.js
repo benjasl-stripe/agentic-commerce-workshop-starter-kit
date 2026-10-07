@@ -54,21 +54,15 @@ Examples by situation:
 
 NEVER leave the user without a clear next step button!
 
-## Scope (IMPORTANT)
-You are a shopping assistant. Your ONLY job is to help customers browse and buy products from this store.
+## Scope
+Stay on shopping for this store. Shopping includes questions about the products, not only buying them: what you sell, price, stock, how a product behaves, who it is for, comparisons, and detailed reviews. "Tell me more" and "in more detail" are product questions. Answer them.
 
-DO NOT:
-- Answer questions unrelated to shopping or our products
-- Provide advice on topics outside of product selection and purchasing
-- Write code, essays, stories, or any content not about our products
-- Discuss politics, health advice, legal matters, or other sensitive topics
-
-If asked about anything outside your scope, politely redirect: "I'm here to help you shop! Is there anything from our catalog I can help you with?"
+Use "I'm here to help you shop!" only when the message is not about these products at all, such as politics or writing code.
 
 `;
 
 export function buildSystemPrompt(options = {}) {
-  const { aiPersona, checkoutState, products, userProfile } = options;
+  const { aiPersona, checkoutState, products, userProfile, mppUnlock } = options;
   
   // Always start with the hardcoded prefix
   let systemPrompt = SYSTEM_PROMPT_PREFIX;
@@ -260,6 +254,26 @@ If complete_checkout fails with an error:
     systemPrompt += `\n\n## Available Products\n**NONE** - The product catalog is empty. You MUST tell the user "No products have been added yet" and nothing else about products.\n`;
   }
 
+  // Module 7 only. Absent unless the agent just paid for the ski-review paper.
+  const paper = mppUnlock?.reviewDocument?.content;
+  if (paper) {
+    systemPrompt += `
+
+## Paid article — already fetched. ANSWER NOW
+The article below is already in this prompt. You paid for it over MPP. It is the page the shopper is asking about.
+- Answer the question from this article. Start with the comparison or recommendation.
+- Never say you cannot access websites, external sites, URLs, or the internet. Never say you are using a research paper you happen to have. Do not mention fetching, paying, or MPP. A spend line is added after your reply.
+- Do not invent firsthand testing. If the article cites a source, you may use that citation and its link.
+- Map models: Rustler 10 → SKI-001, Bent 100 → SKI-002, QST 98 → SKI-003.
+- Show [PRODUCT:SKI-…] when recommending.
+- Do not use [PROFILE:payment] to unlock the article. That button buys a ski.
+- Do not use the "I'm here to help you shop" redirect for this question.
+
+### Article
+${paper}
+`;
+  }
+
   return systemPrompt;
 }
 
@@ -268,7 +282,7 @@ If complete_checkout fails with an error:
 // ============================================================================
 
 export async function createChatCompletion(messages, options = {}) {
-  const { checkoutState, products, aiPersona, userProfile, hasStripePaymentMethod, toolResults, lambdaEndpoint } = options;
+  const { checkoutState, products, aiPersona, userProfile, hasStripePaymentMethod, mppUnlock, toolResults, lambdaEndpoint } = options;
   
   // Use provided endpoint, fall back to env var
   const endpoint = lambdaEndpoint || getLambdaEndpoint();
@@ -278,7 +292,7 @@ export async function createChatCompletion(messages, options = {}) {
   }
   
   const workshopSecret = getWorkshopSecret();
-  const workshopContext = buildSystemPrompt({ aiPersona, checkoutState, products, userProfile });
+  const workshopContext = buildSystemPrompt({ aiPersona, checkoutState, products, userProfile, mppUnlock });
   
   console.log(`   Calling Lambda AI service: ${endpoint}`);
   console.log(`   🔑 Workshop secret: ${workshopSecret ? 'Set (' + workshopSecret.substring(0, 10) + '...)' : 'NOT SET'}`);

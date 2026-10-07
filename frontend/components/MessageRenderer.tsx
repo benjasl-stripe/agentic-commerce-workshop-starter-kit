@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -11,6 +12,47 @@ interface MessageRendererProps {
   onProductClick?: (product: Product) => void;
   onActionClick?: (action: string) => void;
 }
+
+const markdownComponents = {
+  p: ({ children }: { children?: ReactNode }) => (
+    <p className="mb-3 last:mb-0 text-[15px] leading-7 text-gray-800">{children}</p>
+  ),
+  h1: ({ children }: { children?: ReactNode }) => (
+    <h2 className="mt-4 mb-2 first:mt-0 text-base font-semibold leading-snug text-gray-950">{children}</h2>
+  ),
+  h2: ({ children }: { children?: ReactNode }) => (
+    <h3 className="mt-4 mb-2 first:mt-0 text-[15px] font-semibold leading-snug text-gray-950">{children}</h3>
+  ),
+  h3: ({ children }: { children?: ReactNode }) => (
+    <h4 className="mt-4 mb-1.5 first:mt-0 text-[15px] font-semibold leading-snug text-gray-950">{children}</h4>
+  ),
+  ul: ({ children }: { children?: ReactNode }) => (
+    <ul className="mb-3 ml-5 list-disc space-y-1.5 text-[15px] leading-7 text-gray-800">{children}</ul>
+  ),
+  ol: ({ children }: { children?: ReactNode }) => (
+    <ol className="mb-3 ml-5 list-decimal space-y-1.5 text-[15px] leading-7 text-gray-800">{children}</ol>
+  ),
+  li: ({ children }: { children?: ReactNode }) => <li className="pl-1">{children}</li>,
+  strong: ({ children }: { children?: ReactNode }) => (
+    <strong className="font-semibold text-gray-950">{children}</strong>
+  ),
+  em: ({ children }: { children?: ReactNode }) => <em className="italic">{children}</em>,
+  hr: () => <hr className="my-4 border-gray-200" />,
+  a: ({ href, children }: { href?: string; children?: ReactNode }) => (
+    <a href={href} className="text-indigo-700 underline underline-offset-2" target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  ),
+  blockquote: ({ children }: { children?: ReactNode }) => (
+    <blockquote className="my-3 border-l-2 border-indigo-200 pl-3 text-gray-600">{children}</blockquote>
+  ),
+  code: ({ className, children }: { className?: string; children?: ReactNode }) =>
+    className ? (
+      <code className={className}>{children}</code>
+    ) : (
+      <code className="rounded bg-gray-100 px-1.5 py-0.5 text-[13px] text-gray-900">{children}</code>
+    ),
+};
 
 // Profile button labels and icons
 const PROFILE_BUTTONS: Record<string, { label: string; icon: string }> = {
@@ -45,10 +87,11 @@ export default function MessageRenderer({ content, products, onOpenProfile, onPr
   const flushTextBuffer = () => {
     if (currentTextBuffer.trim()) {
       groupedElements.push(
-        <div key={`text-${groupedElements.length}`} className="prose prose-sm max-w-none">
+        <div key={`text-${groupedElements.length}`} className="max-w-none">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeHighlight]}
+            components={markdownComponents}
           >
             {currentTextBuffer}
           </ReactMarkdown>
